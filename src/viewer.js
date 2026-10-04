@@ -37,6 +37,10 @@ const VIEW_DIRECTIONS = Object.freeze({
   bottom: new THREE.Vector3(0, -1, 0)
 });
 const GHOST_COLOR = new THREE.Color(0x8a909b);
+const SELECTED_COLOR = new THREE.Color(0xbd7bd4);
+const DROP_TARGET_COLOR = new THREE.Color(0xe1c7ec);
+const MANUAL_COLOR = new THREE.Color(0xbd7bd4);
+const PICK_MAX_MOVEMENT_PX = 7;
 const LOOK_AT_MARKER_OPACITY = 0.58;
 const LOOK_AT_MARKER_GHOST_OPACITY = 0.24;
 const LOCAL_BOX_Z = new THREE.Vector3(0, 0, 1);
@@ -95,6 +99,7 @@ export function createViewer(host) {
   const pointGroup = namedGroup(scene, 'Point clouds');
   const vectorGroup = namedGroup(scene, 'Velocity vectors');
   const labelGroup = namedGroup(scene, 'Object IDs');
+  const manualGroup = namedGroup(scene, 'Manual takeover');
 
   const visibility = {
     clusters: true,
@@ -105,9 +110,13 @@ export function createViewer(host) {
   };
 
   const views = new Map();
+  const manualViews = new Map();
+  const raycaster = new THREE.Raycaster();
+  const pickPointer = new THREE.Vector2();
   const zoneRenderer = createZoneRenderer();
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const unitBoxEdges = new THREE.EdgesGeometry(unitBox);
+  const unitHitBox = unitBox.clone();
   unitBox.dispose();
   // Integrate the look-at cue into the lower forward edge: a straight edge
   // with a centered outward triangle (___/\\___). The apex is intentionally
@@ -140,6 +149,10 @@ export function createViewer(host) {
   let cameraInteractionActive = false;
   let cameraChangeHandler;
   let viewStateChangeHandler;
+  let clusterSelectionHandler;
+  let selectedClusterKey = null;
+  let dropClusterKey = null;
+  let pickGesture = null;
   let cameraUserControlled = false;
   let activeView = PERSPECTIVE_VIEW_ID;
 
@@ -737,6 +750,7 @@ export function createViewer(host) {
       }
     }
 
+    refreshManualLinks();
     zoneRenderer.update(frame.getZoneEvents());
   }
 
@@ -750,6 +764,18 @@ export function createViewer(host) {
         opacity: 0.95
       })
     );
+
+    const hitbox = new THREE.Mesh(
+      unitHitBox,
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        colorWrite: false
+      })
+    );
+    hitbox.userData.clusterKey = key;
+    box.add(hitbox);
 
     const lookAtMarker = new THREE.Line(
       unitLookAtMarker,
@@ -805,20 +831,31 @@ export function createViewer(host) {
     labelGroup.add(label);
 
     return {
+      key,
       box,
+      hitbox,
       lookAtMarker,
       centroid,
       velocity,
       points,
       label,
       labelText: id === undefined ? '' : String(id),
+      sourceId: id,
+      uuid: '',
+      operatorStateReady: false,
+      operatorId: null,
+      clusterState: null,
       color,
       sceneAddress
     };
   }
 
   function updateLabel(view, id, uuid) {
-    const text = id !== undefined ? String(id) : uuid ? uuid.slice(0, 8) : '';
+    view.sourceId = id;
+    view.uuid = uuid || '';
+    const text = view.operatorStateReady
+      ? view.operatorId === null ? '' : String(view.operatorId)
+      : id !== undefined ? String(id) : uuid ? uuid.slice(0, 8) : '';
     if (!text) {
       view.label.visible = false;
       return;
@@ -856,20 +893,8 @@ export function createViewer(host) {
     updateVelocity(view.velocity, center, velocity, view.color, velocityDirection);
 
     const state = cluster.getState();
-    const color = state === ClusterState.Ghost ? GHOST_COLOR : view.color;
-    view.box.material.color.copy(color);
-    view.lookAtMarker.material.color.copy(color);
-    view.centroid.material.color.copy(color);
-    view.velocity.setColor(color);
-    view.points.material.color.copy(color);
-
-    view.box.material.opacity = state === ClusterState.WillLeave ? 0.35 : 0.95;
-    view.lookAtMarker.material.opacity = state === ClusterState.Ghost
-      ? LOOK_AT_MARKER_GHOST_OPACITY
-      : state === ClusterState.WillLeave
-        ? LOOK_AT_MARKER_OPACITY * 0.55
-        : LOOK_AT_MARKER_OPACITY;
-    view.points.material.opacity = state === ClusterState.Ghost ? 0.45 : 0.92;
+    view.clusterState = state;
+    applyInteractionStyle(view);
 
     const pointBounds = view.points.geometry.boundingSphere ?? new THREE.Sphere();
     pointBounds.center.fromArray(center);
@@ -883,6 +908,37 @@ export function createViewer(host) {
     const top = center[1] + Math.abs(size[1]) * 0.5 + 0.18;
     view.label.position.set(center[0], Math.max(top, FLOOR_Y + 0.16), center[2]);
     view.label.material.opacity = state === ClusterState.Ghost ? 0.55 : 1;
+  }
+
+  function applyInteractionStyle(view) {
+    if (view.clusterState === null) return;
+    const selected = view.key === selectedClusterKey;
+    const dropTarget = view.key === dropClusterKey;
+    const baseColor = view.clusterState === ClusterState.Ghost ? GHOST_COLOR : view.color;
+    const color = dropTarget ? DROP_TARGET_COLOR : selected ? SELECTED_COLOR : baseColor;
+
+    view.box.material.color.copy(color);
+    view.lookAtMarker.material.color.copy(color);
+    view.centroid.material.color.copy(color);
+    view.velocity.setColor(color);
+    view.points.material.color.copy(color);
+
+    view.box.material.opacity = dropTarget || selected
+      ? 1
+      : view.clusterState === ClusterState.WillLeave ? 0.35 : 0.95;
+    view.lookAtMarker.material.opacity = view.clusterState === ClusterState.Ghost
+      ? LOOK_AT_MARKER_GHOST_OPACITY
+      : view.clusterState === ClusterState.WillLeave
+        ? LOOK_AT_MARKER_OPACITY * 0.55
+        : LOOK_AT_MARKER_OPACITY;
+    view.points.material.opacity = dropTarget || selected
+      ? 1
+      : view.clusterState === ClusterState.Ghost ? 0.45 : 0.92;
+    view.centroid.scale.setScalar(dropTarget ? 1.8 : selected ? 1.45 : 1);
+  }
+
+  function refreshInteractionStyles() {
+    for (const view of views.values()) applyInteractionStyle(view);
   }
 
   function updateLookAtMarker(view, lookAt) {
@@ -934,6 +990,175 @@ export function createViewer(host) {
     view.centroid.visible = false;
     view.velocity.visible = false;
     view.points.frustumCulled = false;
+  }
+
+  function pickClusterAt(clientX, clientY) {
+    if (!visibility.clusters) return null;
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (
+      clientX < rect.left || clientX > rect.right
+      || clientY < rect.top || clientY > rect.bottom
+      || rect.width <= 0 || rect.height <= 0
+    ) {
+      return null;
+    }
+
+    pickPointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(pickPointer, camera);
+    const hitboxes = [...views.values()]
+      .filter((view) => view.box.visible)
+      .map((view) => view.hitbox);
+    const hit = raycaster.intersectObjects(hitboxes, false)[0];
+    return hit?.object?.userData?.clusterKey ?? null;
+  }
+
+  function setClusterSelectionHandler(handler) {
+    clusterSelectionHandler = typeof handler === 'function' ? handler : undefined;
+  }
+
+  function setDropCluster(key) {
+    const next = key ? String(key) : null;
+    if (next === dropClusterKey) return;
+    dropClusterKey = next;
+    refreshInteractionStyles();
+  }
+
+  function setOperatorState(snapshot) {
+    const slots = snapshot?.slots ?? [];
+    const clusters = snapshot?.clusters ?? [];
+    const selected = snapshot?.selected ?? null;
+    const slotByCluster = new Map(
+      slots.filter((slot) => slot.clusterKey).map((slot) => [slot.clusterKey, slot])
+    );
+
+    selectedClusterKey = selected?.type === 'cluster'
+      ? selected.key
+      : selected?.type === 'id'
+        ? slots.find((slot) => slot.id === selected.id)?.clusterKey ?? null
+        : null;
+
+    for (const view of views.values()) {
+      const slot = slotByCluster.get(view.key);
+      view.operatorStateReady = true;
+      view.operatorId = slot?.id ?? null;
+      updateLabel(view, view.sourceId, view.uuid);
+    }
+
+    syncManualViews(slots, clusters);
+    refreshInteractionStyles();
+  }
+
+  function syncManualViews(slots, clusters) {
+    const clusterByKey = new Map(clusters.map((cluster) => [cluster.key, cluster]));
+    const active = new Set();
+
+    for (const slot of slots) {
+      if (!slot.manual) continue;
+      active.add(slot.id);
+      let view = manualViews.get(slot.id);
+      if (!view) {
+        view = createManualView(slot.id);
+        manualViews.set(slot.id, view);
+      }
+
+      const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
+      const size = cluster?.size ?? [0.5, 1.8, 0.5];
+      view.clusterKey = slot.clusterKey;
+      view.box.position.fromArray(slot.manualPosition);
+      view.centroid.position.fromArray(slot.manualPosition);
+      view.label.position.set(
+        slot.manualPosition[0],
+        slot.manualPosition[1] + Math.max(Math.abs(size[1]), 0.2) * 0.5 + 0.18,
+        slot.manualPosition[2]
+      );
+      view.box.scale.set(
+        Math.max(Math.abs(size[0]), 0.2),
+        Math.max(Math.abs(size[1]), 0.2),
+        Math.max(Math.abs(size[2]), 0.2)
+      );
+      updateManualLink(view);
+    }
+
+    for (const [id, view] of manualViews) {
+      if (active.has(id)) continue;
+      disposeManualView(view);
+      manualViews.delete(id);
+    }
+  }
+
+  function createManualView(id) {
+    const box = new THREE.LineSegments(
+      unitBoxEdges,
+      new THREE.LineBasicMaterial({
+        color: MANUAL_COLOR,
+        transparent: true,
+        opacity: 0.92,
+        depthTest: false
+      })
+    );
+    box.renderOrder = 9;
+
+    const centroid = new THREE.Mesh(
+      centroidGeometry,
+      new THREE.MeshBasicMaterial({
+        color: MANUAL_COLOR,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false
+      })
+    );
+    centroid.renderOrder = 9;
+
+    const link = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(),
+        new THREE.Vector3()
+      ]),
+      new THREE.LineBasicMaterial({
+        color: MANUAL_COLOR,
+        transparent: true,
+        opacity: 0.42,
+        depthTest: false
+      })
+    );
+    link.renderOrder = 8;
+
+    const label = createLabelSprite(`M${id}`, MANUAL_COLOR);
+    label.renderOrder = 11;
+    manualGroup.add(link, box, centroid, label);
+
+    return { id, clusterKey: null, box, centroid, link, label };
+  }
+
+  function updateManualLink(view) {
+    const source = view.clusterKey ? views.get(view.clusterKey) : null;
+    if (!source?.centroid.visible) {
+      view.link.visible = false;
+      return;
+    }
+
+    const positions = view.link.geometry.getAttribute('position');
+    positions.setXYZ(0, source.centroid.position.x, source.centroid.position.y, source.centroid.position.z);
+    positions.setXYZ(1, view.centroid.position.x, view.centroid.position.y, view.centroid.position.z);
+    positions.needsUpdate = true;
+    view.link.geometry.computeBoundingSphere();
+    view.link.visible = true;
+  }
+
+  function refreshManualLinks() {
+    for (const view of manualViews.values()) updateManualLink(view);
+  }
+
+  function disposeManualView(view) {
+    manualGroup.remove(view.link, view.box, view.centroid, view.label);
+    view.link.geometry.dispose();
+    view.link.material.dispose();
+    view.box.material.dispose();
+    view.centroid.material.dispose();
+    disposeLabel(view.label);
   }
 
   function renderSetup(root, selectedSceneAddress) {
@@ -1097,6 +1322,7 @@ export function createViewer(host) {
     labelGroup.remove(view.label);
 
     view.box.material.dispose();
+    view.hitbox.material.dispose();
     view.lookAtMarker.material.dispose();
     view.centroid.material.dispose();
     view.points.geometry.dispose();
@@ -1109,6 +1335,29 @@ export function createViewer(host) {
   resetCamera();
   resize();
   new ResizeObserver(resize).observe(host);
+
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    pickGesture = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY
+    };
+  });
+
+  renderer.domElement.addEventListener('pointerup', (event) => {
+    if (!pickGesture || pickGesture.pointerId !== event.pointerId) return;
+    const gesture = pickGesture;
+    pickGesture = null;
+    if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > PICK_MAX_MOVEMENT_PX) return;
+    const key = pickClusterAt(event.clientX, event.clientY);
+    if (key) clusterSelectionHandler?.(key);
+  });
+
+  renderer.domElement.addEventListener('pointercancel', () => {
+    pickGesture = null;
+  });
+
   renderer.domElement.addEventListener('dblclick', (event) => {
     if (event.button === 0) resetCamera();
   });
@@ -1137,7 +1386,11 @@ export function createViewer(host) {
     setOrthographicView,
     setRightInset,
     setViewStateChangeHandler,
-    setVisibility
+    setVisibility,
+    pickClusterAt,
+    setClusterSelectionHandler,
+    setDropCluster,
+    setOperatorState
   };
 }
 
