@@ -1475,10 +1475,14 @@ export function createViewer(host) {
     pointGroup.visible = points;
     vectorGroup.visible = vectors;
     for (const view of views.values()) {
-      view.lookAtMarker.visible = vectors && view.lookAtMarker.userData.hasDirection;
+      view.lookAtMarker.visible = vectors
+        && view.key === selectedClusterKey
+        && !view.manualSource
+        && view.lookAtMarker.userData.hasDirection;
     }
     labelGroup.visible = clusters || points;
     applySetupVisibility();
+    refreshInteractionStyles();
   }
 
   function clearTracking() {
