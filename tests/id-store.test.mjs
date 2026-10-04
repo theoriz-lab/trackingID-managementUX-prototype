@@ -53,12 +53,18 @@ test('manual assignment kicks an occupied cluster to the next eligible ID', () =
   assert.equal(state.slots[1].clusterKey, 'a');
 });
 
-test('pending lock on an empty ID learns the next cluster assigned there', () => {
+test('pending lock on an empty ID waits for an explicit assignment and then learns it', () => {
   const store = createIdStore({ count: 2 });
   store.lockAndLearn(1);
   store.syncFrame([cluster('a', 1)]);
-  const state = store.snapshot();
 
+  let state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(state.slots[0].pendingLearn, true);
+
+  store.assignClusterToId('a', 1);
+  state = store.snapshot();
   assert.equal(state.slots[0].clusterKey, 'a');
   assert.equal(state.slots[0].identityKey, 'a');
   assert.equal(state.slots[0].pendingLearn, false);
@@ -99,4 +105,53 @@ test('solo state is independent from enable, lock and assignment', () => {
   assert.equal(state.slots[0].enabled, true);
   assert.equal(state.slots[0].locked, true);
   assert.equal(state.slots[0].clusterKey, 'a');
+});
+
+
+test('release keeps a live cluster intentionally unassigned until it leaves tracking', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  assert.equal(store.releaseId(1), true);
+
+  store.syncFrame([cluster('a', 1)]);
+  let state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[1].clusterKey, null);
+
+  store.syncFrame([]);
+  store.syncFrame([cluster('a', 1)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+});
+
+test('swap refuses disabled IDs', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  store.setEnabled(2, false);
+
+  assert.equal(store.swapAssignments(1, 2), false);
+  const state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+  assert.equal(state.slots[1].clusterKey, 'b');
+});
+
+test('swap into a pending Lock & Learn ID learns the arriving cluster', () => {
+  const store = createIdStore({ count: 3 });
+  store.lockAndLearn(1);
+  store.syncFrame([cluster('a', 2), cluster('b', 3)]);
+
+  assert.equal(store.swapAssignments(1, 2), true);
+  const state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+  assert.equal(state.slots[0].identityKey, 'a');
+  assert.equal(state.slots[0].pendingLearn, false);
+});
+
+test('a selected cluster is cleared when it leaves tracking', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  store.selectCluster('a');
+  store.syncFrame([]);
+
+  assert.equal(store.snapshot().selected, null);
 });
