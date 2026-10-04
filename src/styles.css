@@ -545,3 +545,9 @@ kbd { min-width: 25px; padding: 3px 5px; border: 1px solid var(--line); border-b
   .id-row { min-height: 54px; }
   .id-number { font-size: 22px; }
 }
+
+
+/* Preserve semantic cluster color on selected tray chips. */
+.cluster-chip.selected {
+  background: color-mix(in srgb, var(--cluster-color) 20%, #2b2b2b);
+}

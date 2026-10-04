@@ -172,43 +172,44 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
   }
 
   function applyVisualGrammar(snapshot, clusterByKey, visibleClusters) {
-  const soloMode = snapshot.slots.some((slot) => slot.enabled && slot.solo);
-  idList.classList.toggle('solo-mode', soloMode);
+    const soloMode = snapshot.slots.some((slot) => slot.enabled && slot.solo);
+    idList.classList.toggle('solo-mode', soloMode);
 
-  idList.querySelectorAll('.id-row').forEach((row, index) => {
-    const slot = snapshot.slots[index];
-    if (!slot) return;
-    const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
-    const filled = Boolean(cluster?.visible) || slot.manual;
-    const warning = identityWarning(slot);
-    const color = cluster
-      ? clusterDisplayColorCss(cluster.key, cluster.sourceId, cluster.ghost)
-      : slot.manual
-        ? '#bd7bd4'
-        : '';
+    idList.querySelectorAll('.id-row').forEach((row, index) => {
+      const slot = snapshot.slots[index];
+      if (!slot) return;
+      const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
+      const filled = Boolean(cluster?.visible) || slot.manual;
+      const warning = identityWarning(slot);
+      const color = cluster
+        ? clusterDisplayColorCss(cluster.key, cluster.sourceId, cluster.ghost)
+        : slot.manual
+          ? '#bd7bd4'
+          : '';
 
-    row.classList.toggle('is-enabled', slot.enabled);
-    row.classList.toggle('is-disabled', !slot.enabled);
-    row.classList.toggle('is-filled', filled);
-    row.classList.toggle('is-empty', !filled);
-    row.classList.toggle('is-locked', slot.locked);
-    row.classList.toggle('is-solo', slot.solo);
-    row.classList.toggle('is-solo-muted', soloMode && !slot.solo);
-    row.classList.toggle('has-override', warning?.type === 'override');
+      row.classList.toggle('is-enabled', slot.enabled);
+      row.classList.toggle('is-disabled', !slot.enabled);
+      row.classList.toggle('is-filled', filled);
+      row.classList.toggle('is-empty', !filled);
+      row.classList.toggle('is-locked', slot.locked);
+      row.classList.toggle('is-solo', slot.solo);
+      row.classList.toggle('is-solo-muted', soloMode && !slot.solo);
+      row.classList.toggle('has-override', warning?.type === 'override');
 
-    if (color) row.style.setProperty('--cluster-color', color);
-    else row.style.removeProperty('--cluster-color');
-  });
+      if (color) row.style.setProperty('--cluster-color', color);
+      else row.style.removeProperty('--cluster-color');
+    });
 
-  clusterTray.querySelectorAll('.cluster-chip').forEach((chip, index) => {
-    const cluster = visibleClusters[index];
-    if (!cluster) return;
-    chip.style.setProperty(
-      '--cluster-color',
-      clusterDisplayColorCss(cluster.key, cluster.sourceId, cluster.ghost)
-    );
-  });
-}
+    clusterTray.querySelectorAll('.cluster-chip').forEach((chip, index) => {
+      const cluster = visibleClusters[index];
+      if (!cluster) return;
+      chip.style.setProperty(
+        '--cluster-color',
+        clusterDisplayColorCss(cluster.key, cluster.sourceId, cluster.ghost)
+      );
+    });
+  }
+
 
   function renderInspector(snapshot, clusterByKey) {
     if (snapshot.selected?.type === 'id') {
