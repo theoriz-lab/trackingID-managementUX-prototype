@@ -1,3 +1,5 @@
+import { clusterDisplayColorCss } from './cluster-color.js';
+
 const DRAG_START_DISTANCE_PX = 7;
 const TOUCH_DRAG_HOLD_MS = 230;
 const TOUCH_SCROLL_ESCAPE_PX = 9;
@@ -24,7 +26,7 @@ function slotState(slot, clusterByKey) {
 function stateLabel(state) {
   return {
     assigned: 'Assigned',
-    free: 'Free',
+    free: 'Empty',
     reserved: 'Reserved',
     learning: 'Learning',
     disabled: 'Disabled',
@@ -126,7 +128,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
             ${slot.locked ? '<span class="mini-flag accent">LOCK</span>' : ''}
             ${warning?.type === 'override' ? '<span class="mini-flag warning">OVERRIDE</span>' : ''}
             ${slot.solo ? '<span class="mini-flag solo">SOLO</span>' : ''}
-            ${slot.manual ? '<span class="mini-flag">MANUAL</span>' : ''}
+            ${slot.manual ? '<span class="mini-flag manual">MANUAL</span>' : ''}
           </div>
           <button class="row-action${slot.locked ? ' active' : ''}" type="button" data-action="toggle-lock" data-id="${slot.id}" title="${slot.locked ? 'Unlock identity' : 'Lock and learn'}" aria-label="${slot.locked ? 'Unlock' : 'Lock and learn'} ID ${slot.id}">L</button>
         </article>`;
@@ -154,6 +156,8 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
         }).join('')
       : '<div class="tray-empty">Waiting for live clusters…</div>';
 
+    applyVisualGrammar(snapshot, clusterByKey, visibleClusters);
+
     liveCount.textContent = `${visibleClusters.length} live`;
     slotCount.textContent = `${snapshot.slots.length} IDs`;
 
@@ -166,6 +170,46 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
 
     renderInspector(snapshot, clusterByKey);
   }
+
+  function applyVisualGrammar(snapshot, clusterByKey, visibleClusters) {
+    const soloMode = snapshot.slots.some((slot) => slot.enabled && slot.solo);
+    idList.classList.toggle('solo-mode', soloMode);
+
+    idList.querySelectorAll('.id-row').forEach((row, index) => {
+      const slot = snapshot.slots[index];
+      if (!slot) return;
+      const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
+      const filled = Boolean(cluster?.visible) || slot.manual;
+      const warning = identityWarning(slot);
+      const color = cluster
+        ? clusterDisplayColorCss(cluster.key, cluster.sourceId, cluster.ghost)
+        : slot.manual
+          ? '#bd7bd4'
+          : '';
+
+      row.classList.toggle('is-enabled', slot.enabled);
+      row.classList.toggle('is-disabled', !slot.enabled);
+      row.classList.toggle('is-filled', filled);
+      row.classList.toggle('is-empty', !filled);
+      row.classList.toggle('is-locked', slot.locked);
+      row.classList.toggle('is-solo', slot.solo);
+      row.classList.toggle('is-solo-muted', soloMode && !slot.solo);
+      row.classList.toggle('has-override', warning?.type === 'override');
+
+      if (color) row.style.setProperty('--cluster-color', color);
+      else row.style.removeProperty('--cluster-color');
+    });
+
+    clusterTray.querySelectorAll('.cluster-chip').forEach((chip, index) => {
+      const cluster = visibleClusters[index];
+      if (!cluster) return;
+      chip.style.setProperty(
+        '--cluster-color',
+        clusterDisplayColorCss(cluster.key, cluster.sourceId, cluster.ghost)
+      );
+    });
+  }
+
 
   function renderInspector(snapshot, clusterByKey) {
     if (snapshot.selected?.type === 'id') {

@@ -32,6 +32,9 @@ Identity recognition itself is **not implemented here**: the prototype currently
 - Locking an empty slot puts it in a learn state; the next cluster explicitly assigned there becomes the identity.
 - **Lock active** locks only currently occupied IDs, leaving spare slots allocatable for the common LBE workflow.
 - Selecting an ID or cluster highlights the corresponding tracked person in 3D.
+- Slot visuals use a strict operator grammar: gray means empty, an occupied slot inherits the exact live cluster color, enabled empty slots keep a small green activity cue, and disabled slots are visibly muted.
+- Lock is a separate visual layer: a closed padlock plus an amber frame. A locked empty/reserved slot stays gray so occupancy and reservation cannot be confused.
+- Selection uses a neutral white outline instead of replacing the cluster color. Solo dims non-solo slots, while Manual and Override remain explicit secondary badges.
 - Manual takeover uses a direct X/Z touch pad, keeps the tracked cluster association in the background, and draws a separate manual proxy linked to the automatic estimate.
 - Keyboard: `L` toggles Lock & Learn, `M` toggles Manual takeover, `Esc` clears the selection.
 
