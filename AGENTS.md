@@ -28,6 +28,7 @@ Additional behavior:
 - Lock & Learn on an occupied ID learns that cluster; on an empty ID it waits for the next explicit assignment.
 - Lock active affects occupied IDs only so spare slots remain free.
 - Manual takeover keeps background tracking associated with the ID.
+- `identityKey` is currently a cluster-key/UUID placeholder for UX testing, not a production ReID descriptor. Do not infer or claim true identity recognition in this prototype.
 
 ## Interaction
 
