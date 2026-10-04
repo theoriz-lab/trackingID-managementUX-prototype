@@ -57,4 +57,4 @@ Before considering a change ready:
 2. Run all Node tests, especially `tests/id-store.test.mjs`.
 3. Build/test the pinned SDK when SDK-facing behavior changes.
 4. Assemble the Pages artifact and verify it contains no runtime CDN dependency.
-5. Manually qualify mouse and touch selection, cluster→ID, ID→cluster, ID→ID swap, Lock & Learn, warnings, manual X/Z takeover, mobile panels, orbit/pan/zoom and reconnect behavior.
+5. Manually qualify mouse/touch 3D selection, 3D→ID drag, capsule→ID drag/reassignment, bottom-tray right-click assignment, Enabled/Solo, Lock & Learn, Manual ground takeover + smooth return, camera-cube orbit, mobile layout and reconnect behavior.
