@@ -54,7 +54,7 @@ function assignedSlotForCluster(snapshot, key) {
   return snapshot.slots.find((slot) => slot.clusterKey === key);
 }
 
-export function createIdInterface({ store }) {
+export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
   const idList = document.querySelector('#id-list');
   const clusterTray = document.querySelector('#cluster-tray');
   const inspector = document.querySelector('#inspector-content');
@@ -66,7 +66,6 @@ export function createIdInterface({ store }) {
   const sceneLabel = document.querySelector('#scene-label');
   const mobileTabs = document.querySelector('#mobile-tabs');
 
-  let connectionPhase = 'idle';
   let dragState = null;
   let activeDropTarget = null;
   let suppressClickUntil = 0;
@@ -208,7 +207,7 @@ export function createIdInterface({ store }) {
                 <span class="pad-axis pad-axis-z"></span>
                 <i class="manual-point" style="left:${Math.max(0, Math.min(100, padX))}%;top:${Math.max(0, Math.min(100, padY))}%"></i>
               </div>
-              <div class="manual-readout"><span>X ${position[0].toFixed(2)} m</span><span>Z ${position[2].toFixed(2)} m</span></div>
+              <div class="manual-readout" data-manual-readout="${slot.id}"><span>X ${position[0].toFixed(2)} m</span><span>Z ${position[2].toFixed(2)} m</span></div>
             </div>` : ''}
         </section>`;
       return;
@@ -277,16 +276,16 @@ export function createIdInterface({ store }) {
   }
 
   function setConnectionState(state) {
-    connectionPhase = state?.phase ?? 'idle';
+    const phase = state?.phase ?? 'idle';
     const label = {
       idle: 'Idle',
       connecting: 'Connecting',
       retrying: 'Retrying',
       connected: 'Connected',
       error: 'Error'
-    }[connectionPhase] ?? 'Idle';
+    }[phase] ?? 'Idle';
     connectionStatus.textContent = label;
-    connectionStatus.className = `connection-status ${connectionPhase}`;
+    connectionStatus.className = `connection-status ${phase}`;
     connectionNote.textContent = state?.note ?? '';
   }
 
@@ -444,6 +443,7 @@ export function createIdInterface({ store }) {
   function cancelPendingDrag() {
     clearHoldTimer();
     dragState = null;
+    setActiveDropTarget(null);
   }
 
   function startDragAt(clientX, clientY) {
@@ -464,12 +464,51 @@ export function createIdInterface({ store }) {
     return shortClusterName(cluster);
   }
 
-  function validDropTarget(element) {
+  function findDropTarget(element, clientX, clientY) {
     const target = element?.closest?.('[data-drop-type]');
-    if (!target) return null;
-    if (dragState.type === 'id' && ['cluster', 'id'].includes(target.dataset.dropType)) return target;
-    if (dragState.type === 'cluster' && target.dataset.dropType === 'id') return target;
+    if (target) {
+      const type = target.dataset.dropType;
+      if (dragState.type === 'id' && (type === 'cluster' || type === 'id')) {
+        return {
+          element: target,
+          type,
+          id: Number(target.dataset.id) || null,
+          clusterKey: target.dataset.clusterKey || null
+        };
+      }
+      if (dragState.type === 'cluster' && type === 'id') {
+        return {
+          element: target,
+          type,
+          id: Number(target.dataset.id),
+          clusterKey: null
+        };
+      }
+    }
+
+    if (dragState.type === 'id') {
+      const clusterKey = pickClusterAt?.(clientX, clientY);
+      if (clusterKey) {
+        return { element: null, type: 'cluster', id: null, clusterKey };
+      }
+    }
     return null;
+  }
+
+  function sameDropTarget(first, second) {
+    if (!first || !second) return first === second;
+    return first.element === second.element
+      && first.type === second.type
+      && first.id === second.id
+      && first.clusterKey === second.clusterKey;
+  }
+
+  function setActiveDropTarget(target) {
+    if (sameDropTarget(activeDropTarget, target)) return;
+    activeDropTarget?.element?.classList.remove('drop-target');
+    activeDropTarget = target;
+    activeDropTarget?.element?.classList.add('drop-target');
+    setDropCluster?.(target?.type === 'cluster' ? target.clusterKey : null);
   }
 
   function moveDragAt(clientX, clientY) {
@@ -478,11 +517,7 @@ export function createIdInterface({ store }) {
     dragState.ghost.hidden = true;
     const underPointer = document.elementFromPoint(clientX, clientY);
     dragState.ghost.hidden = false;
-    const target = validDropTarget(underPointer);
-    if (target === activeDropTarget) return;
-    activeDropTarget?.classList.remove('drop-target');
-    activeDropTarget = target;
-    activeDropTarget?.classList.add('drop-target');
+    setActiveDropTarget(findDropTarget(underPointer, clientX, clientY));
   }
 
   function finishDrag(event) {
@@ -497,8 +532,7 @@ export function createIdInterface({ store }) {
     }
 
     const target = activeDropTarget;
-    activeDropTarget?.classList.remove('drop-target');
-    activeDropTarget = null;
+    setActiveDropTarget(null);
     if (!current.dragging) return;
 
     // Prevent the synthetic click that browsers normally dispatch after a
@@ -507,19 +541,19 @@ export function createIdInterface({ store }) {
     event.preventDefault();
 
     if (!target) return;
-    if (current.type === 'cluster' && target.dataset.dropType === 'id') {
-      store.assignClusterToId(current.key, Number(target.dataset.id));
+    if (current.type === 'cluster' && target.type === 'id') {
+      store.assignClusterToId(current.key, target.id);
       setMobilePane('inspector');
       return;
     }
 
-    if (current.type === 'id' && target.dataset.dropType === 'cluster') {
-      store.assignClusterToId(target.dataset.clusterKey, current.key);
+    if (current.type === 'id' && target.type === 'cluster') {
+      store.assignClusterToId(target.clusterKey, current.key);
       return;
     }
 
-    if (current.type === 'id' && target.dataset.dropType === 'id') {
-      store.swapAssignments(current.key, Number(target.dataset.id));
+    if (current.type === 'id' && target.type === 'id') {
+      store.swapAssignments(current.key, target.id);
     }
   }
 
@@ -562,6 +596,25 @@ export function createIdInterface({ store }) {
     update(event);
   }
 
+  function updateManualPosition(snapshot = store.snapshot()) {
+    if (snapshot.selected?.type !== 'id') return;
+    const slot = snapshot.slots.find((candidate) => candidate.id === snapshot.selected.id);
+    if (!slot?.manual) return;
+
+    const point = inspector.querySelector(`[data-manual-pad="${slot.id}"] .manual-point`);
+    const readout = inspector.querySelector(`[data-manual-readout="${slot.id}"]`);
+    if (!point || !readout) return;
+
+    const padX = 50 + (slot.manualPosition[0] / MANUAL_PAD_HALF_RANGE_M) * 50;
+    const padY = 50 - (slot.manualPosition[2] / MANUAL_PAD_HALF_RANGE_M) * 50;
+    point.style.left = `${Math.max(0, Math.min(100, padX))}%`;
+    point.style.top = `${Math.max(0, Math.min(100, padY))}%`;
+
+    const values = readout.querySelectorAll('span');
+    if (values[0]) values[0].textContent = `X ${slot.manualPosition[0].toFixed(2)} m`;
+    if (values[1]) values[1].textContent = `Z ${slot.manualPosition[2].toFixed(2)} m`;
+  }
+
   function setMobilePane(pane) {
     const next = pane === 'inspector' ? 'inspector' : 'ids';
     document.body.dataset.mobilePane = next;
@@ -576,6 +629,7 @@ export function createIdInterface({ store }) {
 
   return {
     render,
+    updateManualPosition,
     setConnectionState,
     setScene,
     openInspector() { setMobilePane('inspector'); }
