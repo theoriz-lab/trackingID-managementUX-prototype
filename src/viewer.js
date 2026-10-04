@@ -1541,7 +1541,7 @@ function replaceLabelTexture(sprite, text, color) {
 }
 
 function updateLabelScale(sprite, text) {
-  sprite.scale.set(1.0, String(text).includes('\\n') ? 0.36 : 0.31, 1);
+  sprite.scale.set(1.0, String(text).includes('\n') ? 0.36 : 0.31, 1);
 }
 
 function makeLabelTexture(text, color) {
@@ -1553,7 +1553,7 @@ function makeLabelTexture(text, color) {
   if (!ctx) return new THREE.CanvasTexture(canvas);
 
   const cssColor = `#${color.getHexString()}`;
-  const lines = String(text ?? '').split('\\n', 2);
+  const lines = String(text ?? '').split('\n', 2);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   roundedRect(ctx, 20, 14, 344, 100, 24);
