@@ -155,8 +155,8 @@ export function createConnectionController({
     }
 
     const connection = new AugmentaWebSocketClient(target.url, {
-      clientName: 'Augmenta Three.js Debug Viewer',
-      applicationName: 'Augmenta ThreeJS Example',
+      clientName: 'Augmenta ID Management Prototype',
+      applicationName: 'Augmenta ID Management Prototype',
       applicationVersion: APP_VERSION,
       options: {
         version,
