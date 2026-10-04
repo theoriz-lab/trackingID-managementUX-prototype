@@ -194,3 +194,29 @@ test('learning a different identity clears the stale identity name', () => {
   assert.equal(state.slots[0].identityKey, 'bob');
   assert.equal(state.slots[0].identityName, '');
 });
+
+
+test('manual takeover starts on the floor under the live centroid', () => {
+  const store = createIdStore({ count: 2 });
+  const tracked = cluster('a', 1);
+  tracked.centroid = [1.25, 1.42, -2.5];
+  store.syncFrame([tracked]);
+
+  store.setManual(1, true);
+  const state = store.snapshot();
+
+  assert.deepEqual(state.slots[0].manualPosition, [1.25, 0, -2.5]);
+});
+
+test('point preview data is cloned through snapshots', () => {
+  const store = createIdStore({ count: 2 });
+  const tracked = cluster('a', 1);
+  tracked.preview = [[0.1, 0.2], [0.8, 0.9]];
+  store.syncFrame([tracked]);
+
+  const first = store.snapshot();
+  first.clusters[0].preview[0][0] = 999;
+  const second = store.snapshot();
+
+  assert.deepEqual(second.clusters[0].preview, [[0.1, 0.2], [0.8, 0.9]]);
+});
