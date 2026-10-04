@@ -39,7 +39,6 @@ const VIEW_DIRECTIONS = Object.freeze({
   bottom: new THREE.Vector3(0, -1, 0)
 });
 const UNASSIGNED_COLOR = new THREE.Color(UNASSIGNED_ID_COLOR_VALUE);
-const DROP_TARGET_COLOR = new THREE.Color(0xe1c7ec);
 const PICK_MAX_MOVEMENT_PX = 7;
 const MANUAL_RETURN_DURATION_MS = 680;
 const MANUAL_PROXY_POINT_LIMIT = 180;
@@ -146,7 +145,6 @@ export function createViewer(host) {
   let clusterSelectionHandler;
   let clusterDragHandler;
   let selectedClusterKey = null;
-  let dropClusterKey = null;
   let soloMode = false;
   let soloSlotIds = new Set();
   let soloClusterKeys = new Set();
@@ -927,11 +925,9 @@ export function createViewer(host) {
   function applyInteractionStyle(view) {
     if (view.clusterState === null) return;
     const selected = view.key === selectedClusterKey;
-    const dropTarget = view.key === dropClusterKey;
-    const soloDimmed = soloMode && !soloClusterKeys.has(view.key) && !dropTarget;
+    const soloDimmed = soloMode && !soloClusterKeys.has(view.key);
     const selectedLive = selected && !view.manualSource;
-    const baseColor = view.manualSource ? UNASSIGNED_COLOR : view.color;
-    const color = dropTarget ? DROP_TARGET_COLOR : baseColor;
+    const color = view.manualSource ? UNASSIGNED_COLOR : view.color;
     const ghostFactor = view.clusterState === ClusterState.Ghost ? 0.55 : 1;
 
     view.box.material.color.copy(color);
@@ -973,7 +969,7 @@ export function createViewer(host) {
         ? soloDimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.95
         : 0
     );
-    view.centroid.scale.setScalar(dropTarget ? 1.65 : 1);
+    view.centroid.scale.setScalar(1);
   }
 
   function refreshInteractionStyles() {
@@ -1078,13 +1074,6 @@ export function createViewer(host) {
     return hit ? [floorHit.x, FLOOR_Y, floorHit.z] : null;
   }
 
-  function setDropCluster(key) {
-    const next = key ? String(key) : null;
-    if (next === dropClusterKey) return;
-    dropClusterKey = next;
-    refreshInteractionStyles();
-  }
-
   function setOperatorState(snapshot) {
     const slots = snapshot?.slots ?? [];
     const clusters = snapshot?.clusters ?? [];
@@ -1105,15 +1094,17 @@ export function createViewer(host) {
       const slot = slotByCluster.get(view.key);
       const nextColor = slot ? idColorValue(slot.id) : UNASSIGNED_ID_COLOR_VALUE;
       const colorChanged = view.color.getHex() !== nextColor;
+      const wasManualSource = view.manualSource;
       view.color.setHex(nextColor);
       view.assignedId = slot?.id ?? null;
       view.manualSource = Boolean(slot?.manual);
       view.operatorStateReady = true;
       view.operatorId = slot?.id ?? null;
       view.operatorLabelText = operatorLabelForCluster(slot, view.key);
-      if (colorChanged && view.labelText) {
-        replaceLabelTexture(view.label, view.labelText, view.color);
-        view.labelColorHex = nextColor;
+      if ((colorChanged || wasManualSource !== view.manualSource) && view.labelText) {
+        const labelColor = view.manualSource ? UNASSIGNED_COLOR : view.color;
+        replaceLabelTexture(view.label, view.labelText, labelColor);
+        view.labelColorHex = labelColor.getHex();
       }
       updateLabel(view, view.sourceId, view.uuid);
     }
@@ -1154,7 +1145,15 @@ export function createViewer(host) {
     for (const [id, view] of manualViews) {
       if (active.has(id) || view.returning) continue;
       const source = view.clusterKey ? views.get(view.clusterKey) : null;
-      if (source?.centroid) startManualReturn(view, source);
+      if (source?.centroid) {
+        source.manualSource = true;
+        if (source.labelText) {
+          replaceLabelTexture(source.label, source.labelText, UNASSIGNED_COLOR);
+          source.labelColorHex = UNASSIGNED_COLOR.getHex();
+        }
+        applyInteractionStyle(source);
+        startManualReturn(view, source);
+      }
       else {
         disposeManualView(view);
         manualViews.delete(id);
@@ -1327,6 +1326,13 @@ export function createViewer(host) {
         return;
       }
       view.returnFrame = undefined;
+      source.manualSource = false;
+      source.color.setHex(idColorValue(view.id));
+      if (source.labelText) {
+        replaceLabelTexture(source.label, source.labelText, source.color);
+        source.labelColorHex = source.color.getHex();
+      }
+      applyInteractionStyle(source);
       disposeManualView(view);
       manualViews.delete(view.id);
     };
@@ -1633,7 +1639,6 @@ export function createViewer(host) {
     pickClusterAt,
     setClusterSelectionHandler,
     setClusterDragHandler,
-    setDropCluster,
     setOperatorState
   };
 }
