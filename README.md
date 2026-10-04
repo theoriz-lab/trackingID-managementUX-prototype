@@ -27,6 +27,8 @@ Identity recognition itself is **not implemented here**: the prototype currently
 - Tapping/clicking always offers the same actions in the inspector, so drag is never required.
 - Occupied-ID reassignment kicks the previous cluster to the next eligible free ID.
 - Locked identities reserve their ID while absent.
+- An explicit operator assignment has priority over Identity Lock while that override cluster remains present; the locked identity can reclaim its ID after the override leaves.
+- If Lock & Learn replaces an older learned identity, its stale identity name is cleared rather than being carried onto the new person.
 - Locking an empty slot puts it in a learn state; the next cluster explicitly assigned there becomes the identity.
 - **Lock active** locks only currently occupied IDs, leaving spare slots allocatable for the common LBE workflow.
 - Selecting an ID or cluster highlights the corresponding tracked person in 3D.
