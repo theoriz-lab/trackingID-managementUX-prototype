@@ -1007,6 +1007,7 @@ export function createViewer(host) {
       ((clientX - rect.left) / rect.width) * 2 - 1,
       -((clientY - rect.top) / rect.height) * 2 + 1
     );
+    scene.updateMatrixWorld(true);
     raycaster.setFromCamera(pickPointer, camera);
     const hitboxes = [...views.values()]
       .filter((view) => view.box.visible)
