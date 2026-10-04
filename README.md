@@ -15,6 +15,8 @@ The interface explores four deliberately separate concepts:
 
 The current operator state is a **front-end prototype only**. Assignments, Lock & Learn, identity names and manual positions are modeled locally in the browser; they are not written back to Pleiades yet. Live cluster position/state comes from the real Augmenta SDK stream.
 
+Identity recognition itself is **not implemented here**: the prototype currently uses the live cluster key/UUID as an identity placeholder so the Lock & Learn UX can be exercised. A production ReID descriptor/matcher will replace that placeholder.
+
 ## UX
 
 - Desktop and touch/mobile use the same pointer interaction model.
