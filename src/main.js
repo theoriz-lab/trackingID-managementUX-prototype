@@ -26,10 +26,25 @@ viewer.setVisibility({
 });
 
 const setupStore = createSetupStore();
+let idInterface;
 const idStore = createIdStore({
-  onChange: () => idInterface?.render()
+  onChange: (snapshot, reason) => {
+    viewer.setOperatorState(snapshot);
+    if (reason === 'manual-position') idInterface?.updateManualPosition(snapshot);
+    else idInterface?.render();
+  }
 });
-const idInterface = createIdInterface({ store: idStore });
+idInterface = createIdInterface({
+  store: idStore,
+  pickClusterAt: (x, y) => viewer.pickClusterAt(x, y),
+  setDropCluster: (key) => viewer.setDropCluster(key)
+});
+viewer.setClusterSelectionHandler((key) => {
+  idStore.selectCluster(key);
+  idInterface.openInspector();
+});
+viewer.setOperatorState(idStore.snapshot());
+
 let hasInitialCameraFrame = false;
 let lastSceneLabel = '';
 let disconnectCleanupTimer;
