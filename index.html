@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en" style="background:#181818;color-scheme:dark">
+<html lang="en" style="background:#0d1117;color-scheme:dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#181818">
+  <meta name="theme-color" content="#0d1117">
   <meta name="color-scheme" content="dark">
   <link rel="icon" type="image/png" href="./augmenta-favicon.png?v=4">
   <link rel="shortcut icon" type="image/png" href="./augmenta-favicon.png?v=4">
@@ -22,84 +22,74 @@
   }
   </script>
 </head>
-<body data-mobile-pane="ids">
+<body>
   <main id="app">
-    <header class="app-header">
-      <div class="brand-block">
-        <a class="brand-mark" href="https://augmenta.tech" target="_blank" rel="noopener noreferrer" aria-label="Open Augmenta website">
-          <img src="./augmenta-favicon.png?v=4" alt="">
-        </a>
-        <div class="title-block">
-          <strong>ID Management</strong>
-          <span>Operator prototype</span>
-        </div>
-      </div>
-
-      <div class="header-context" aria-label="Live tracking status">
-        <div class="context-item scene-context">
-          <span class="context-label">Scene</span>
-          <strong id="scene-label">All scenes</strong>
-        </div>
-        <div class="context-item">
-          <span class="context-label">Tracking</span>
-          <strong id="live-count">0 live</strong>
-        </div>
-        <div class="context-item">
-          <span class="context-label">Slots</span>
-          <strong id="slot-count">12 IDs</strong>
-        </div>
-      </div>
-
-      <div class="header-actions">
-        <button id="warning-button" class="warning-button" type="button" hidden>0 warnings</button>
-        <button class="header-button" type="button" data-action="unlock-all">Unlock all</button>
-        <button class="header-button accent" type="button" data-action="lock-all">Lock active</button>
-        <div class="connection-pill" title="Automatic Augmenta connection">
-          <i aria-hidden="true"></i>
-          <span id="connection-status">Connecting</span>
-        </div>
-      </div>
-    </header>
-
     <div class="workspace">
-      <aside class="panel id-panel" aria-label="ID slots">
-        <div class="panel-header">
-          <div>
-            <span class="eyebrow">Tracking output</span>
-            <h1>IDs</h1>
-          </div>
-          <button class="icon-text-button" type="button" data-action="add-slots" title="Add four prototype ID slots">+4</button>
-        </div>
-        <div class="panel-help">Click/tap clusters in 3D. Drag an ID directly onto a cluster, or use the live-cluster tray.</div>
-        <div id="id-list" class="id-list"></div>
-      </aside>
-
       <section class="stage" aria-label="Live tracking view">
         <div id="canvas-host" class="canvas-host"></div>
-        <div class="stage-overlay top-left">
-          <span class="stage-kicker">Live spatial view</span>
-          <strong>Tracking</strong>
-        </div>
-        <div class="stage-overlay top-right connection-detail">
+
+        <div class="stage-status">
+          <span id="scene-label">All scenes</span>
           <span id="connection-note">Connecting automatically with Augmenta defaults…</span>
         </div>
+
+        <div id="camera-cube" class="camera-cube" aria-label="Camera orbit cube">
+          <div class="camera-orbit-ring" aria-hidden="true"></div>
+          <div class="camera-cube-inner">
+            <button class="camera-face camera-face-front" type="button" data-camera-view="front" aria-label="Front view">F</button>
+            <button class="camera-face camera-face-back" type="button" data-camera-view="back" aria-label="Back view">B</button>
+            <button class="camera-face camera-face-right" type="button" data-camera-view="right" aria-label="Right view">R</button>
+            <button class="camera-face camera-face-left" type="button" data-camera-view="left" aria-label="Left view">L</button>
+            <button class="camera-face camera-face-top" type="button" data-camera-view="top" aria-label="Top view">Y</button>
+            <button class="camera-face camera-face-bottom" type="button" data-camera-view="bottom" aria-label="Bottom view">−Y</button>
+          </div>
+          <span class="camera-cube-hint">drag to orbit</span>
+        </div>
+
         <div class="cluster-dock" aria-label="Live clusters">
-          <div class="cluster-dock-label">Live clusters</div>
+          <div class="cluster-dock-header">
+            <strong>Live Clusters <span id="live-count">(0)</span></strong>
+            <span>Right-click to assign to an ID</span>
+          </div>
           <div id="cluster-tray" class="cluster-tray">
             <div class="tray-empty">Waiting for live clusters…</div>
           </div>
         </div>
       </section>
 
-      <aside class="panel inspector-panel" aria-label="Selection inspector">
-        <div id="inspector-content" class="inspector-content"></div>
+      <aside class="id-panel" aria-label="ID slots">
+        <header class="id-panel-header">
+          <div class="id-panel-brand">
+            <a class="brand-mark" href="https://augmenta.tech" target="_blank" rel="noopener noreferrer" aria-label="Open Augmenta website">
+              <img src="./augmenta-favicon.png?v=4" alt="">
+            </a>
+            <div>
+              <h1>ID Management</h1>
+              <span><b id="slot-count">12</b> slots</span>
+            </div>
+          </div>
+          <div class="id-panel-status">
+            <button id="warning-button" class="warning-button" type="button" hidden>0 warnings</button>
+            <div class="connection-pill" title="Automatic Augmenta connection">
+              <i aria-hidden="true"></i>
+              <span id="connection-status">Connecting</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="id-panel-actions">
+          <button type="button" data-action="lock-all"><span class="lock-symbol closed" aria-hidden="true"></span>Lock all active</button>
+          <button type="button" data-action="unlock-all"><span class="lock-symbol open" aria-hidden="true"></span>Unlock all active</button>
+        </div>
+
+        <div class="id-panel-help">
+          <span>Click an ID number to enable/disable</span>
+          <span><b>S</b> Solo</span>
+        </div>
+
+        <div id="id-list" class="id-list"></div>
       </aside>
     </div>
-
-    <nav id="mobile-tabs" class="mobile-tabs" aria-label="Operator panels" role="tablist">
-      <button type="button" role="tab" data-action="mobile-pane" data-pane="ids" class="active" aria-selected="true">IDs</button>
-      <button type="button" role="tab" data-action="mobile-pane" data-pane="inspector" aria-selected="false">Inspector</button>
-    </nav>
   </main>
 
   <script type="module" src="./src/main.js"></script>
