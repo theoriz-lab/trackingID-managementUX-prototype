@@ -1,0 +1,32 @@
+name: Apply capsule viewer
+
+on:
+  push:
+    branches: [ux/capsule-manual-workflow]
+    paths:
+      - '.github/workflows/apply-capsule-viewer.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Apply viewer interaction patch
+        shell: bash
+        run: |
+          cat .tmp/patch-viewer.00 .tmp/patch-viewer.01 .tmp/patch-viewer.02 \
+              .tmp/patch-viewer.03 .tmp/patch-viewer.04 \
+            | base64 --decode > /tmp/patch-viewer.py
+          python3 /tmp/patch-viewer.py
+          node --input-type=module --check < src/viewer.js
+          rm -rf .tmp
+          rm .github/workflows/apply-capsule-viewer.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add ID-colored spatial capsule workflow"
+          git push
