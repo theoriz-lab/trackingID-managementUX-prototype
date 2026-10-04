@@ -31,6 +31,7 @@ jobs:
             .bootstrap/p4.00b010 \
             .bootstrap/p4.00b011 \
             .bootstrap/p4.00b012 \
+            .bootstrap/p4.00b1 \
             .bootstrap/p4.01 \
             .bootstrap/p4.02 \
             .bootstrap/p4.03 \
