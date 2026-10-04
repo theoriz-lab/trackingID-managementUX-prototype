@@ -43,6 +43,9 @@ Additional behavior:
 - Follow Pleiades FrontEnd3 tokens and interaction language rather than creating a separate visual system.
 - Treat slot visuals as semantic layers: occupancy controls the fill, the shared cluster color identifies the occupant, lock controls the frame/padlock, and selection uses a neutral outline. Do not overload one color with multiple meanings.
 - Cluster colors must come from `src/cluster-color.js`; never duplicate the palette or color-selection rule in the viewer or operator UI.
+- Solo is a renderer-level focus state, not only an ID-list style. When enabled solo slots exist, non-solo clusters, labels, point clouds, centroids, velocity vectors and manual proxies must all be strongly dimmed while every solo target stays fully legible.
+- A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display the reserved identity name on a temporary override cluster.
+- Keep the ID list and live-cluster tray transparent over the 3D stage; do not reintroduce opaque panel/card backgrounds unless explicitly requested.
 
 ## Validation
 

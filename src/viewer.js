@@ -6,6 +6,7 @@ import { createZoneRenderer } from './zones.js';
 import { collectZoneAddresses } from './zone-state.js';
 import { VIEW_TRANSITION, viewTransitionEase } from './view-transition.js';
 import { GHOST_CLUSTER_COLOR, clusterColorValue } from './cluster-color.js';
+import { deriveOperatorVisualState, operatorLabelForCluster } from './operator-visual-state.js';
 
 const FLOOR_Y = 0;
 const PANEL_INSET_ANIMATION_DURATION_MS = 220;
@@ -43,6 +44,11 @@ const MANUAL_COLOR = new THREE.Color(0xbd7bd4);
 const PICK_MAX_MOVEMENT_PX = 7;
 const LOOK_AT_MARKER_OPACITY = 0.58;
 const LOOK_AT_MARKER_GHOST_OPACITY = 0.24;
+const SOLO_DIMMED_BOX_OPACITY = 0.035;
+const SOLO_DIMMED_POINT_OPACITY = 0.02;
+const SOLO_DIMMED_LABEL_OPACITY = 0.025;
+const SOLO_DIMMED_VECTOR_OPACITY = 0.025;
+const SOLO_DIMMED_CENTROID_OPACITY = 0.035;
 const LOCAL_BOX_Z = new THREE.Vector3(0, 0, 1);
 export function createViewer(host) {
   const scene = new THREE.Scene();
@@ -136,6 +142,9 @@ export function createViewer(host) {
   let clusterSelectionHandler;
   let selectedClusterKey = null;
   let dropClusterKey = null;
+  let soloMode = false;
+  let soloSlotIds = new Set();
+  let soloClusterKeys = new Set();
   let pickGesture = null;
   let cameraUserControlled = false;
   let activeView = PERSPECTIVE_VIEW_ID;
@@ -779,7 +788,7 @@ export function createViewer(host) {
 
     const centroid = new THREE.Mesh(
       centroidGeometry,
-      new THREE.MeshBasicMaterial({ color })
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
     );
 
     const velocity = new THREE.ArrowHelper(
@@ -828,6 +837,7 @@ export function createViewer(host) {
       uuid: '',
       operatorStateReady: false,
       operatorId: null,
+      operatorLabelText: '',
       clusterState: null,
       color,
       sceneAddress
@@ -835,22 +845,22 @@ export function createViewer(host) {
   }
 
   function updateLabel(view, id, uuid) {
-    view.sourceId = id;
-    view.uuid = uuid || '';
-    const text = view.operatorStateReady
-      ? view.operatorId === null ? '' : String(view.operatorId)
-      : id !== undefined ? String(id) : uuid ? uuid.slice(0, 8) : '';
-    if (!text) {
-      view.label.visible = false;
-      return;
-    }
-
-    if (view.labelText !== text) {
-      replaceLabelTexture(view.label, text, view.color);
-      view.labelText = text;
-    }
-    view.label.visible = true;
+  view.sourceId = id;
+  view.uuid = uuid || '';
+  const labelText = view.operatorStateReady
+    ? view.operatorLabelText
+    : id !== undefined ? String(id) : uuid ? uuid.slice(0, 8) : '';
+  if (!labelText) {
+    view.label.visible = false;
+    return;
   }
+
+  if (view.labelText !== labelText) {
+    replaceLabelTexture(view.label, labelText, view.color);
+    view.labelText = labelText;
+  }
+  view.label.visible = true;
+}
 
   function updateCluster(view, cluster) {
     const center = cluster.getBoundingBoxCenter();
@@ -891,35 +901,46 @@ export function createViewer(host) {
 
     const top = center[1] + Math.abs(size[1]) * 0.5 + 0.18;
     view.label.position.set(center[0], Math.max(top, FLOOR_Y + 0.16), center[2]);
-    view.label.material.opacity = state === ClusterState.Ghost ? 0.55 : 1;
   }
 
   function applyInteractionStyle(view) {
-    if (view.clusterState === null) return;
-    const selected = view.key === selectedClusterKey;
-    const dropTarget = view.key === dropClusterKey;
-    const baseColor = view.clusterState === ClusterState.Ghost ? GHOST_COLOR : view.color;
-    const color = dropTarget ? DROP_TARGET_COLOR : baseColor;
+  if (view.clusterState === null) return;
+  const selected = view.key === selectedClusterKey;
+  const dropTarget = view.key === dropClusterKey;
+  const soloDimmed = soloMode && !soloClusterKeys.has(view.key) && !dropTarget;
+  const baseColor = view.clusterState === ClusterState.Ghost ? GHOST_COLOR : view.color;
+  const color = dropTarget ? DROP_TARGET_COLOR : baseColor;
 
-    view.box.material.color.copy(color);
-    view.lookAtMarker.material.color.copy(color);
-    view.centroid.material.color.copy(color);
-    view.velocity.setColor(color);
-    view.points.material.color.copy(color);
+  view.box.material.color.copy(color);
+  view.lookAtMarker.material.color.copy(color);
+  view.centroid.material.color.copy(color);
+  view.velocity.setColor(color);
+  view.points.material.color.copy(color);
 
-    view.box.material.opacity = dropTarget || selected
+  view.box.material.opacity = soloDimmed
+    ? SOLO_DIMMED_BOX_OPACITY
+    : dropTarget || selected
       ? 1
       : view.clusterState === ClusterState.WillLeave ? 0.35 : 0.95;
-    view.lookAtMarker.material.opacity = view.clusterState === ClusterState.Ghost
+  view.lookAtMarker.material.opacity = soloDimmed
+    ? SOLO_DIMMED_VECTOR_OPACITY
+    : view.clusterState === ClusterState.Ghost
       ? LOOK_AT_MARKER_GHOST_OPACITY
       : view.clusterState === ClusterState.WillLeave
         ? LOOK_AT_MARKER_OPACITY * 0.55
         : LOOK_AT_MARKER_OPACITY;
-    view.points.material.opacity = dropTarget || selected
+  view.points.material.opacity = soloDimmed
+    ? SOLO_DIMMED_POINT_OPACITY
+    : dropTarget || selected
       ? 1
       : view.clusterState === ClusterState.Ghost ? 0.45 : 0.92;
-    view.centroid.scale.setScalar(dropTarget ? 1.8 : selected ? 1.45 : 1);
-  }
+  view.centroid.material.opacity = soloDimmed ? SOLO_DIMMED_CENTROID_OPACITY : 1;
+  view.label.material.opacity = soloDimmed
+    ? SOLO_DIMMED_LABEL_OPACITY
+    : view.clusterState === ClusterState.Ghost ? 0.55 : 1;
+  setArrowOpacity(view.velocity, soloDimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.95);
+  view.centroid.scale.setScalar(dropTarget ? 1.8 : selected ? 1.45 : 1);
+}
 
   function refreshInteractionStyles() {
     for (const view of views.values()) applyInteractionStyle(view);
@@ -1012,29 +1033,32 @@ export function createViewer(host) {
   }
 
   function setOperatorState(snapshot) {
-    const slots = snapshot?.slots ?? [];
-    const clusters = snapshot?.clusters ?? [];
-    const selected = snapshot?.selected ?? null;
-    const slotByCluster = new Map(
-      slots.filter((slot) => slot.clusterKey).map((slot) => [slot.clusterKey, slot])
-    );
+  const slots = snapshot?.slots ?? [];
+  const clusters = snapshot?.clusters ?? [];
+  const selected = snapshot?.selected ?? null;
+  const operatorVisualState = deriveOperatorVisualState(slots);
+  const slotByCluster = operatorVisualState.slotByCluster;
+  soloMode = operatorVisualState.soloMode;
+  soloSlotIds = operatorVisualState.soloSlotIds;
+  soloClusterKeys = operatorVisualState.soloClusterKeys;
 
-    selectedClusterKey = selected?.type === 'cluster'
-      ? selected.key
-      : selected?.type === 'id'
-        ? slots.find((slot) => slot.id === selected.id)?.clusterKey ?? null
-        : null;
+  selectedClusterKey = selected?.type === 'cluster'
+    ? selected.key
+    : selected?.type === 'id'
+      ? slots.find((slot) => slot.id === selected.id)?.clusterKey ?? null
+      : null;
 
-    for (const view of views.values()) {
-      const slot = slotByCluster.get(view.key);
-      view.operatorStateReady = true;
-      view.operatorId = slot?.id ?? null;
-      updateLabel(view, view.sourceId, view.uuid);
-    }
-
-    syncManualViews(slots, clusters);
-    refreshInteractionStyles();
+  for (const view of views.values()) {
+    const slot = slotByCluster.get(view.key);
+    view.operatorStateReady = true;
+    view.operatorId = slot?.id ?? null;
+    view.operatorLabelText = operatorLabelForCluster(slot, view.key);
+    updateLabel(view, view.sourceId, view.uuid);
   }
+
+  syncManualViews(slots, clusters);
+  refreshInteractionStyles();
+}
 
   function syncManualViews(slots, clusters) {
     const clusterByKey = new Map(clusters.map((cluster) => [cluster.key, cluster]));
@@ -1064,6 +1088,7 @@ export function createViewer(host) {
         Math.max(Math.abs(size[1]), 0.2),
         Math.max(Math.abs(size[2]), 0.2)
       );
+      applyManualSoloStyle(view, soloMode && !soloSlotIds.has(slot.id));
       updateManualLink(view);
     }
 
@@ -1117,6 +1142,13 @@ export function createViewer(host) {
 
     return { id, clusterKey: null, box, centroid, link, label };
   }
+
+  function applyManualSoloStyle(view, dimmed) {
+  view.box.material.opacity = dimmed ? SOLO_DIMMED_BOX_OPACITY : 0.92;
+  view.centroid.material.opacity = dimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.95;
+  view.link.material.opacity = dimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.42;
+  view.label.material.opacity = dimmed ? SOLO_DIMMED_LABEL_OPACITY : 1;
+}
 
   function updateManualLink(view) {
     const source = view.clusterKey ? views.get(view.clusterKey) : null;
@@ -1456,6 +1488,11 @@ function configureArrow(arrow) {
   arrow.cone.renderOrder = 8;
 }
 
+function setArrowOpacity(arrow, opacity) {
+  arrow.line.material.opacity = opacity;
+  arrow.cone.material.opacity = opacity;
+}
+
 function updateVelocity(arrow, origin, velocity, color, direction) {
   const speed = speedFromVelocity(velocity);
 
@@ -1491,7 +1528,7 @@ function createLabelSprite(text, color) {
     depthWrite: false
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(0.72, 0.28, 1);
+  updateLabelScale(sprite, text);
   sprite.renderOrder = 10;
   return sprite;
 }
@@ -1500,20 +1537,28 @@ function replaceLabelTexture(sprite, text, color) {
   sprite.material.map?.dispose();
   sprite.material.map = makeLabelTexture(text, color);
   sprite.material.needsUpdate = true;
+  updateLabelScale(sprite, text);
+}
+
+function updateLabelScale(sprite, text) {
+  sprite.scale.set(1.0, String(text).includes('
+') ? 0.36 : 0.31, 1);
 }
 
 function makeLabelTexture(text, color) {
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 96;
+  canvas.width = 384;
+  canvas.height = 128;
 
   const ctx = canvas.getContext('2d');
   if (!ctx) return new THREE.CanvasTexture(canvas);
 
   const cssColor = `#${color.getHexString()}`;
+  const lines = String(text ?? '').split('
+', 2);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  roundedRect(ctx, 24, 16, 208, 64, 22);
+  roundedRect(ctx, 20, 14, 344, 100, 24);
   ctx.fillStyle = 'rgba(10, 13, 18, 0.88)';
   ctx.fill();
 
@@ -1522,10 +1567,19 @@ function makeLabelTexture(text, color) {
   ctx.stroke();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '500 38px Inter, Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 128, 49);
+
+  if (lines.length > 1) {
+    ctx.font = '600 40px Inter, Arial, sans-serif';
+    ctx.fillText(lines[0], 192, 46, 320);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.74)';
+    ctx.font = '500 24px Inter, Arial, sans-serif';
+    ctx.fillText(lines[1], 192, 86, 320);
+  } else {
+    ctx.font = '500 42px Inter, Arial, sans-serif';
+    ctx.fillText(lines[0], 192, 65, 320);
+  }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
