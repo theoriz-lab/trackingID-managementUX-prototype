@@ -30,13 +30,11 @@ function replaceRequired(source, search, replacement) {
 }
 
 requirePath(join(root, 'vendor', 'AugmentaClientSDK-JS', 'dist', 'esm'), 'built Augmenta SDK');
-requirePath(join(root, 'vendor', 'qrcode-generator', 'qrcode.js'), 'vendored QR generator');
 requirePath(join(threeRoot, 'build', 'three.module.js'), 'Three.js runtime');
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'src'), { recursive: true });
 mkdirSync(sdkOut, { recursive: true });
-mkdirSync(join(out, 'vendor', 'qrcode-generator'), { recursive: true });
 
 copyFileSync(join(root, 'index.html'), join(out, 'index.html'));
 copyFileSync(join(root, 'augmenta-favicon.png'), join(out, 'augmenta-favicon.png'));
@@ -54,13 +52,8 @@ cpSync(
   sdkOut,
   { recursive: true }
 );
-copyFileSync(
-  join(root, 'vendor', 'qrcode-generator', 'qrcode.js'),
-  join(out, 'vendor', 'qrcode-generator', 'qrcode.js')
-);
-
 // Keep the live Pages app runtime self-contained. A full refresh with an empty
-// browser cache must not wait on jsDelivr before the app/QR can initialize.
+// browser cache must not wait on jsDelivr before the app can initialize.
 const threeOut = join(out, 'vendor', 'three', rev);
 mkdirSync(threeOut, { recursive: true });
 mkdirSync(join(threeOut, 'examples', 'jsm'), { recursive: true });
@@ -99,7 +92,6 @@ html = replaceRequired(
   `./vendor/AugmentaClientSDK-JS/${rev}/dist/esm/index.js`
 );
 html = replaceRequired(html, './src/styles.css', `./src/styles.css?v=${rev}`);
-html = replaceRequired(html, './src/qr.js', `./src/qr.js?v=${rev}`);
 html = replaceRequired(html, './src/main.js', `./src/main.js?v=${rev}`);
 
 if (html.includes('cdn.jsdelivr.net')) {
