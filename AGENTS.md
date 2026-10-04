@@ -41,6 +41,8 @@ Additional behavior:
 - Avoid hover-only affordances.
 - Keep targets comfortably usable on touch screens and preserve keyboard access on desktop.
 - Follow Pleiades FrontEnd3 tokens and interaction language rather than creating a separate visual system.
+- Treat slot visuals as semantic layers: occupancy controls the fill, the shared cluster color identifies the occupant, lock controls the frame/padlock, and selection uses a neutral outline. Do not overload one color with multiple meanings.
+- Cluster colors must come from `src/cluster-color.js`; never duplicate the palette or color-selection rule in the viewer or operator UI.
 
 ## Validation
 

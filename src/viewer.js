@@ -5,6 +5,7 @@ import { speedFromVelocity } from './motion.js';
 import { createZoneRenderer } from './zones.js';
 import { collectZoneAddresses } from './zone-state.js';
 import { VIEW_TRANSITION, viewTransitionEase } from './view-transition.js';
+import { GHOST_CLUSTER_COLOR, clusterColorValue } from './cluster-color.js';
 
 const FLOOR_Y = 0;
 const PANEL_INSET_ANIMATION_DURATION_MS = 220;
@@ -36,30 +37,13 @@ const VIEW_DIRECTIONS = Object.freeze({
   top: new THREE.Vector3(0, 1, 0),
   bottom: new THREE.Vector3(0, -1, 0)
 });
-const GHOST_COLOR = new THREE.Color(0x8a909b);
-const SELECTED_COLOR = new THREE.Color(0xbd7bd4);
+const GHOST_COLOR = new THREE.Color(GHOST_CLUSTER_COLOR);
 const DROP_TARGET_COLOR = new THREE.Color(0xe1c7ec);
 const MANUAL_COLOR = new THREE.Color(0xbd7bd4);
 const PICK_MAX_MOVEMENT_PX = 7;
 const LOOK_AT_MARKER_OPACITY = 0.58;
 const LOOK_AT_MARKER_GHOST_OPACITY = 0.24;
 const LOCAL_BOX_Z = new THREE.Vector3(0, 0, 1);
-const SESSION_COLOR_OFFSET = Math.floor(Math.random() * 1000);
-const PALETTE = [
-  0x4cc9f0, // cyan
-  0x4895ef, // blue
-  0x4361ee, // indigo
-  0x7c5cff, // violet
-  0xb15cff, // purple
-  0xf15bb5, // pink
-  0xff6b6b, // coral
-  0xff922b, // orange
-  0xf9c74f, // gold
-  0x90be6d, // green
-  0x43aa8b, // teal
-  0x2ec4b6  // aqua
-];
-
 export function createViewer(host) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0c0f14);
@@ -915,7 +899,7 @@ export function createViewer(host) {
     const selected = view.key === selectedClusterKey;
     const dropTarget = view.key === dropClusterKey;
     const baseColor = view.clusterState === ClusterState.Ghost ? GHOST_COLOR : view.color;
-    const color = dropTarget ? DROP_TARGET_COLOR : selected ? SELECTED_COLOR : baseColor;
+    const color = dropTarget ? DROP_TARGET_COLOR : baseColor;
 
     view.box.material.color.copy(color);
     view.lookAtMarker.material.color.copy(color);
@@ -1570,15 +1554,7 @@ function namedGroup(scene, name) {
 }
 
 function objectColor(key, id) {
-  const seed = Number.isInteger(id) ? id : hashString(key);
-  const index = Math.abs(seed * 5 + SESSION_COLOR_OFFSET) % PALETTE.length;
-  return new THREE.Color(PALETTE[index]);
-}
-
-function hashString(value) {
-  let hash = 0;
-  for (const char of value) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
-  return hash;
+  return new THREE.Color(clusterColorValue(key, id));
 }
 
 // Scene dimensions are magnitudes. Placement above preserves the requested
