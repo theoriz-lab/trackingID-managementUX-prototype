@@ -5,7 +5,7 @@ import { speedFromVelocity } from './motion.js';
 import { createZoneRenderer } from './zones.js';
 import { collectZoneAddresses } from './zone-state.js';
 import { VIEW_TRANSITION, viewTransitionEase } from './view-transition.js';
-import { GHOST_CLUSTER_COLOR, clusterColorValue } from './cluster-color.js';
+import { idColorValue, UNASSIGNED_ID_COLOR_VALUE } from './id-colors.js';
 import { deriveOperatorVisualState, operatorLabelForCluster } from './operator-visual-state.js';
 
 const FLOOR_Y = 0;
@@ -38,10 +38,10 @@ const VIEW_DIRECTIONS = Object.freeze({
   top: new THREE.Vector3(0, 1, 0),
   bottom: new THREE.Vector3(0, -1, 0)
 });
-const GHOST_COLOR = new THREE.Color(GHOST_CLUSTER_COLOR);
-const DROP_TARGET_COLOR = new THREE.Color(0xe1c7ec);
-const MANUAL_COLOR = new THREE.Color(0xbd7bd4);
+const UNASSIGNED_COLOR = new THREE.Color(UNASSIGNED_ID_COLOR_VALUE);
 const PICK_MAX_MOVEMENT_PX = 7;
+const MANUAL_RETURN_DURATION_MS = 680;
+const MANUAL_PROXY_POINT_LIMIT = 180;
 const LOOK_AT_MARKER_OPACITY = 0.58;
 const LOOK_AT_MARKER_GHOST_OPACITY = 0.24;
 const SOLO_DIMMED_BOX_OPACITY = 0.035;
@@ -119,6 +119,9 @@ export function createViewer(host) {
     new THREE.Vector3(0.5, -0.495, 0.502)
   ]);
   const centroidGeometry = new THREE.SphereGeometry(0.045, 12, 8);
+  const groundDonutGeometry = new THREE.RingGeometry(0.09, 0.145, 36);
+  const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -FLOOR_Y);
+  const floorHit = new THREE.Vector3();
 
   const lookAtDirection = new THREE.Vector3();
   const renderedPositiveZ = new THREE.Vector3();
@@ -140,8 +143,8 @@ export function createViewer(host) {
   let cameraChangeHandler;
   let viewStateChangeHandler;
   let clusterSelectionHandler;
+  let clusterDragHandler;
   let selectedClusterKey = null;
-  let dropClusterKey = null;
   let soloMode = false;
   let soloSlotIds = new Set();
   let soloClusterKeys = new Set();
@@ -748,13 +751,13 @@ export function createViewer(host) {
   }
 
   function createObjectView(key, id, sceneAddress) {
-    const color = objectColor(key, id);
+    const color = UNASSIGNED_COLOR.clone();
     const box = new THREE.LineSegments(
       unitBoxEdges,
       new THREE.LineBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.95
+        opacity: 0
       })
     );
 
@@ -775,7 +778,7 @@ export function createViewer(host) {
       new THREE.LineBasicMaterial({
         color,
         transparent: true,
-        opacity: LOOK_AT_MARKER_OPACITY,
+        opacity: 0,
         depthTest: false,
         depthWrite: false
       })
@@ -788,8 +791,22 @@ export function createViewer(host) {
 
     const centroid = new THREE.Mesh(
       centroidGeometry,
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 })
     );
+
+    const groundDonut = new THREE.Mesh(
+      groundDonutGeometry,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    );
+    groundDonut.rotation.x = -Math.PI / 2;
+    groundDonut.renderOrder = 9;
 
     const velocity = new THREE.ArrowHelper(
       new THREE.Vector3(0, 0, 1),
@@ -808,17 +825,15 @@ export function createViewer(host) {
         size: 0.03,
         sizeAttenuation: true,
         transparent: true,
-        opacity: 0.92
+        opacity: 0.70
       })
     );
-    // Point-only packets have no cheap spatial bound. Avoid Three.js scanning
-    // every point to derive one; cluster-backed clouds get a cheap box bound.
     points.frustumCulled = false;
 
     const label = createLabelSprite(id === undefined ? '' : String(id), color);
     label.visible = id !== undefined;
 
-    clusterGroup.add(box, centroid);
+    clusterGroup.add(box, centroid, groundDonut);
     vectorGroup.add(velocity);
     pointGroup.add(points);
     labelGroup.add(label);
@@ -829,15 +844,19 @@ export function createViewer(host) {
       hitbox,
       lookAtMarker,
       centroid,
+      groundDonut,
       velocity,
       points,
       label,
       labelText: id === undefined ? '' : String(id),
+      labelColorHex: color.getHex(),
       sourceId: id,
       uuid: '',
       operatorStateReady: false,
       operatorId: null,
       operatorLabelText: '',
+      assignedId: null,
+      manualSource: false,
       clusterState: null,
       color,
       sceneAddress
@@ -881,8 +900,8 @@ export function createViewer(host) {
     setLeftHandedQuaternion(view.box.quaternion, rotation);
     updateLookAtMarker(view, cluster.getLookAt());
 
-    view.centroid.visible = true;
     view.centroid.position.fromArray(centroid);
+    view.groundDonut.position.set(centroid[0], FLOOR_Y + 0.012, centroid[2]);
 
     updateVelocity(view.velocity, center, velocity, view.color, velocityDirection);
 
@@ -904,43 +923,54 @@ export function createViewer(host) {
   }
 
   function applyInteractionStyle(view) {
-  if (view.clusterState === null) return;
-  const selected = view.key === selectedClusterKey;
-  const dropTarget = view.key === dropClusterKey;
-  const soloDimmed = soloMode && !soloClusterKeys.has(view.key) && !dropTarget;
-  const baseColor = view.clusterState === ClusterState.Ghost ? GHOST_COLOR : view.color;
-  const color = dropTarget ? DROP_TARGET_COLOR : baseColor;
+    if (view.clusterState === null) return;
+    const selected = view.key === selectedClusterKey;
+    const soloDimmed = soloMode && !soloClusterKeys.has(view.key);
+    const selectedLive = selected && !view.manualSource;
+    const color = view.manualSource ? UNASSIGNED_COLOR : view.color;
+    const ghostFactor = view.clusterState === ClusterState.Ghost ? 0.55 : 1;
 
-  view.box.material.color.copy(color);
-  view.lookAtMarker.material.color.copy(color);
-  view.centroid.material.color.copy(color);
-  view.velocity.setColor(color);
-  view.points.material.color.copy(color);
+    view.box.material.color.copy(color);
+    view.lookAtMarker.material.color.copy(color);
+    view.centroid.material.color.copy(color);
+    view.groundDonut.material.color.copy(color);
+    view.velocity.setColor(color);
+    view.points.material.color.copy(color);
 
-  view.box.material.opacity = soloDimmed
-    ? SOLO_DIMMED_BOX_OPACITY
-    : dropTarget || selected
-      ? 1
-      : view.clusterState === ClusterState.WillLeave ? 0.35 : 0.95;
-  view.lookAtMarker.material.opacity = soloDimmed
-    ? SOLO_DIMMED_VECTOR_OPACITY
-    : view.clusterState === ClusterState.Ghost
-      ? LOOK_AT_MARKER_GHOST_OPACITY
-      : view.clusterState === ClusterState.WillLeave
-        ? LOOK_AT_MARKER_OPACITY * 0.55
-        : LOOK_AT_MARKER_OPACITY;
-  view.points.material.opacity = soloDimmed
-    ? SOLO_DIMMED_POINT_OPACITY
-    : dropTarget || selected
-      ? 1
-      : view.clusterState === ClusterState.Ghost ? 0.45 : 0.92;
-  view.centroid.material.opacity = soloDimmed ? SOLO_DIMMED_CENTROID_OPACITY : 1;
-  view.label.material.opacity = soloDimmed
-    ? SOLO_DIMMED_LABEL_OPACITY
-    : view.clusterState === ClusterState.Ghost ? 0.55 : 1;
-  setArrowOpacity(view.velocity, soloDimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.95);
-  view.centroid.scale.setScalar(dropTarget ? 1.8 : selected ? 1.45 : 1);
-}
+    view.box.visible = true;
+    view.box.material.opacity = selectedLive
+      ? soloDimmed ? SOLO_DIMMED_BOX_OPACITY : ghostFactor
+      : 0;
+    view.centroid.visible = selectedLive;
+    view.centroid.material.opacity = selectedLive
+      ? soloDimmed ? SOLO_DIMMED_CENTROID_OPACITY : ghostFactor
+      : 0;
+    view.groundDonut.visible = selectedLive;
+    view.groundDonut.material.opacity = selectedLive
+      ? soloDimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.9 * ghostFactor
+      : 0;
+
+    view.lookAtMarker.visible = selectedLive
+      && visibility.vectors
+      && view.lookAtMarker.userData.hasDirection;
+    view.lookAtMarker.material.opacity = view.lookAtMarker.visible
+      ? soloDimmed ? SOLO_DIMMED_VECTOR_OPACITY : LOOK_AT_MARKER_OPACITY * ghostFactor
+      : 0;
+
+    view.points.material.opacity = soloDimmed
+      ? SOLO_DIMMED_POINT_OPACITY
+      : view.manualSource ? 0.38 : selected ? 1 : 0.72 * ghostFactor;
+    view.label.material.opacity = soloDimmed
+      ? SOLO_DIMMED_LABEL_OPACITY
+      : view.manualSource ? 0.44 : 0.92 * ghostFactor;
+    setArrowOpacity(
+      view.velocity,
+      selectedLive && visibility.vectors
+        ? soloDimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.95
+        : 0
+    );
+    view.centroid.scale.setScalar(1);
+  }
 
   function refreshInteractionStyles() {
     for (const view of views.values()) applyInteractionStyle(view);
@@ -971,7 +1001,9 @@ export function createViewer(host) {
 
     view.lookAtMarker.scale.set(1, 1, side);
     view.lookAtMarker.userData.hasDirection = true;
-    view.lookAtMarker.visible = visibility.vectors;
+    view.lookAtMarker.visible = visibility.vectors
+      && view.key === selectedClusterKey
+      && !view.manualSource;
   }
 
   function updatePoints(view, cloud) {
@@ -993,6 +1025,7 @@ export function createViewer(host) {
   function hideCluster(view) {
     view.box.visible = false;
     view.centroid.visible = false;
+    view.groundDonut.visible = false;
     view.velocity.visible = false;
     view.points.frustumCulled = false;
   }
@@ -1015,7 +1048,7 @@ export function createViewer(host) {
     scene.updateMatrixWorld(true);
     raycaster.setFromCamera(pickPointer, camera);
     const hitboxes = [...views.values()]
-      .filter((view) => view.box.visible)
+      .filter((view) => view.clusterState !== null)
       .map((view) => view.hitbox);
     const hit = raycaster.intersectObjects(hitboxes, false)[0];
     return hit?.object?.userData?.clusterKey ?? null;
@@ -1025,40 +1058,60 @@ export function createViewer(host) {
     clusterSelectionHandler = typeof handler === 'function' ? handler : undefined;
   }
 
-  function setDropCluster(key) {
-    const next = key ? String(key) : null;
-    if (next === dropClusterKey) return;
-    dropClusterKey = next;
-    refreshInteractionStyles();
+  function setClusterDragHandler(handler) {
+    clusterDragHandler = typeof handler === 'function' ? handler : undefined;
+  }
+
+  function raycastFloor(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    pickPointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    raycaster.setFromCamera(pickPointer, camera);
+    const hit = raycaster.ray.intersectPlane(floorPlane, floorHit);
+    return hit ? [floorHit.x, FLOOR_Y, floorHit.z] : null;
   }
 
   function setOperatorState(snapshot) {
-  const slots = snapshot?.slots ?? [];
-  const clusters = snapshot?.clusters ?? [];
-  const selected = snapshot?.selected ?? null;
-  const operatorVisualState = deriveOperatorVisualState(slots);
-  const slotByCluster = operatorVisualState.slotByCluster;
-  soloMode = operatorVisualState.soloMode;
-  soloSlotIds = operatorVisualState.soloSlotIds;
-  soloClusterKeys = operatorVisualState.soloClusterKeys;
+    const slots = snapshot?.slots ?? [];
+    const clusters = snapshot?.clusters ?? [];
+    const selected = snapshot?.selected ?? null;
+    const operatorVisualState = deriveOperatorVisualState(slots);
+    const slotByCluster = operatorVisualState.slotByCluster;
+    soloMode = operatorVisualState.soloMode;
+    soloSlotIds = operatorVisualState.soloSlotIds;
+    soloClusterKeys = operatorVisualState.soloClusterKeys;
 
-  selectedClusterKey = selected?.type === 'cluster'
-    ? selected.key
-    : selected?.type === 'id'
-      ? slots.find((slot) => slot.id === selected.id)?.clusterKey ?? null
-      : null;
+    selectedClusterKey = selected?.type === 'cluster'
+      ? selected.key
+      : selected?.type === 'id'
+        ? slots.find((slot) => slot.id === selected.id)?.clusterKey ?? null
+        : null;
 
-  for (const view of views.values()) {
-    const slot = slotByCluster.get(view.key);
-    view.operatorStateReady = true;
-    view.operatorId = slot?.id ?? null;
-    view.operatorLabelText = operatorLabelForCluster(slot, view.key);
-    updateLabel(view, view.sourceId, view.uuid);
+    for (const view of views.values()) {
+      const slot = slotByCluster.get(view.key);
+      const nextColor = slot ? idColorValue(slot.id) : UNASSIGNED_ID_COLOR_VALUE;
+      const colorChanged = view.color.getHex() !== nextColor;
+      const wasManualSource = view.manualSource;
+      view.color.setHex(nextColor);
+      view.assignedId = slot?.id ?? null;
+      view.manualSource = Boolean(slot?.manual);
+      view.operatorStateReady = true;
+      view.operatorId = slot?.id ?? null;
+      view.operatorLabelText = operatorLabelForCluster(slot, view.key);
+      if ((colorChanged || wasManualSource !== view.manualSource) && view.labelText) {
+        const labelColor = view.manualSource ? UNASSIGNED_COLOR : view.color;
+        replaceLabelTexture(view.label, view.labelText, labelColor);
+        view.labelColorHex = labelColor.getHex();
+      }
+      updateLabel(view, view.sourceId, view.uuid);
+    }
+
+    syncManualViews(slots, clusters);
+    refreshInteractionStyles();
   }
-
-  syncManualViews(slots, clusters);
-  refreshInteractionStyles();
-}
 
   function syncManualViews(slots, clusters) {
     const clusterByKey = new Map(clusters.map((cluster) => [cluster.key, cluster]));
@@ -1073,96 +1126,217 @@ export function createViewer(host) {
         manualViews.set(slot.id, view);
       }
 
-      const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
-      const size = cluster?.size ?? [0.5, 1.8, 0.5];
+      view.returning = false;
+      if (view.returnFrame) {
+        cancelAnimationFrame(view.returnFrame);
+        view.returnFrame = undefined;
+      }
       view.clusterKey = slot.clusterKey;
-      view.box.position.fromArray(slot.manualPosition);
-      view.centroid.position.fromArray(slot.manualPosition);
-      view.label.position.set(
-        slot.manualPosition[0],
-        slot.manualPosition[1] + Math.max(Math.abs(size[1]), 0.2) * 0.5 + 0.18,
-        slot.manualPosition[2]
-      );
-      view.box.scale.set(
-        Math.max(Math.abs(size[0]), 0.2),
-        Math.max(Math.abs(size[1]), 0.2),
-        Math.max(Math.abs(size[2]), 0.2)
-      );
+      view.color.setHex(idColorValue(slot.id));
+      setManualViewColor(view, view.color);
+      const source = slot.clusterKey ? views.get(slot.clusterKey) : null;
+      updateManualSilhouette(view, source);
+      view.group.position.set(slot.manualPosition[0], FLOOR_Y + 0.016, slot.manualPosition[2]);
+      view.label.position.set(0, manualProxyHeight(view) + 0.16, 0);
       applyManualSoloStyle(view, soloMode && !soloSlotIds.has(slot.id));
       updateManualLink(view);
     }
 
     for (const [id, view] of manualViews) {
-      if (active.has(id)) continue;
-      disposeManualView(view);
-      manualViews.delete(id);
+      if (active.has(id) || view.returning) continue;
+      const source = view.clusterKey ? views.get(view.clusterKey) : null;
+      if (source?.centroid) {
+        source.manualSource = true;
+        if (source.labelText) {
+          replaceLabelTexture(source.label, source.labelText, UNASSIGNED_COLOR);
+          source.labelColorHex = UNASSIGNED_COLOR.getHex();
+        }
+        applyInteractionStyle(source);
+        startManualReturn(view, source);
+      }
+      else {
+        disposeManualView(view);
+        manualViews.delete(id);
+      }
     }
   }
 
   function createManualView(id) {
-    const box = new THREE.LineSegments(
-      unitBoxEdges,
-      new THREE.LineBasicMaterial({
-        color: MANUAL_COLOR,
-        transparent: true,
-        opacity: 0.92,
-        depthTest: false
-      })
-    );
-    box.renderOrder = 9;
+    const color = new THREE.Color(idColorValue(id));
+    const group = new THREE.Group();
+    group.name = `Manual ID ${id}`;
 
-    const centroid = new THREE.Mesh(
-      centroidGeometry,
-      new THREE.MeshBasicMaterial({
-        color: MANUAL_COLOR,
+    const points = new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({
+        color,
+        size: 0.035,
+        sizeAttenuation: true,
         transparent: true,
         opacity: 0.95,
         depthTest: false
       })
     );
-    centroid.renderOrder = 9;
+    points.renderOrder = 9;
+
+    const centroid = new THREE.Mesh(
+      centroidGeometry,
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false })
+    );
+    centroid.position.y = 0.035;
+    centroid.renderOrder = 10;
+
+    const donut = new THREE.Mesh(
+      groundDonutGeometry,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    );
+    donut.rotation.x = -Math.PI / 2;
+    donut.renderOrder = 10;
 
     const link = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(),
-        new THREE.Vector3()
-      ]),
-      new THREE.LineBasicMaterial({
-        color: MANUAL_COLOR,
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+      new THREE.LineDashedMaterial({
+        color,
         transparent: true,
-        opacity: 0.42,
+        opacity: 0.68,
+        dashSize: 0.12,
+        gapSize: 0.075,
         depthTest: false
       })
     );
     link.renderOrder = 8;
 
-    const label = createLabelSprite(`M${id}`, MANUAL_COLOR);
+    const label = createLabelSprite(`ID ${id} · Manual`, color);
     label.renderOrder = 11;
-    manualGroup.add(link, box, centroid, label);
+    group.add(points, centroid, donut, label);
+    manualGroup.add(group, link);
 
-    return { id, clusterKey: null, box, centroid, link, label };
+    return {
+      id,
+      clusterKey: null,
+      group,
+      points,
+      centroid,
+      donut,
+      link,
+      label,
+      color,
+      proxyHeight: 1.6,
+      returning: false,
+      returnFrame: undefined
+    };
+  }
+
+  function setManualViewColor(view, color) {
+    view.points.material.color.copy(color);
+    view.centroid.material.color.copy(color);
+    view.donut.material.color.copy(color);
+    view.link.material.color.copy(color);
+    if (view.label.userData.colorHex !== color.getHex()) {
+      replaceLabelTexture(view.label, `ID ${view.id} · Manual`, color);
+      view.label.userData.colorHex = color.getHex();
+    }
+  }
+
+  function manualProxyHeight(view) {
+    return Math.max(view.proxyHeight || 1.6, 0.4);
+  }
+
+  function updateManualSilhouette(view, source) {
+    const sourcePosition = source?.points?.geometry?.getAttribute('position');
+    const sourceCentroid = source?.centroid?.position;
+    if (!sourcePosition || !sourceCentroid || sourcePosition.count <= 0) {
+      view.points.visible = false;
+      view.proxyHeight = 1.6;
+      return;
+    }
+
+    const step = Math.max(1, Math.ceil(sourcePosition.count / MANUAL_PROXY_POINT_LIMIT));
+    const sampled = [];
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let index = 0; index < sourcePosition.count; index += step) {
+      const x = sourcePosition.getX(index);
+      const y = sourcePosition.getY(index);
+      const z = sourcePosition.getZ(index);
+      sampled.push([x, y, z]);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      if (sampled.length >= MANUAL_PROXY_POINT_LIMIT) break;
+    }
+
+    const values = new Float32Array(sampled.length * 3);
+    sampled.forEach(([x, y, z], index) => {
+      const offset = index * 3;
+      values[offset] = x - sourceCentroid.x;
+      values[offset + 1] = y - minY + 0.025;
+      values[offset + 2] = z - sourceCentroid.z;
+    });
+    view.points.geometry.setAttribute('position', new THREE.BufferAttribute(values, 3));
+    view.points.geometry.computeBoundingSphere();
+    view.points.visible = values.length > 0;
+    view.proxyHeight = Number.isFinite(maxY - minY) ? maxY - minY : 1.6;
   }
 
   function applyManualSoloStyle(view, dimmed) {
-  view.box.material.opacity = dimmed ? SOLO_DIMMED_BOX_OPACITY : 0.92;
-  view.centroid.material.opacity = dimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.95;
-  view.link.material.opacity = dimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.42;
-  view.label.material.opacity = dimmed ? SOLO_DIMMED_LABEL_OPACITY : 1;
-}
+    const opacity = dimmed ? SOLO_DIMMED_POINT_OPACITY : 0.95;
+    view.points.material.opacity = opacity;
+    view.centroid.material.opacity = dimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.95;
+    view.donut.material.opacity = dimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.95;
+    view.link.material.opacity = dimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.68;
+    view.label.material.opacity = dimmed ? SOLO_DIMMED_LABEL_OPACITY : 1;
+  }
 
   function updateManualLink(view) {
     const source = view.clusterKey ? views.get(view.clusterKey) : null;
-    if (!source?.centroid.visible) {
+    if (!source?.centroid) {
       view.link.visible = false;
       return;
     }
 
     const positions = view.link.geometry.getAttribute('position');
-    positions.setXYZ(0, source.centroid.position.x, source.centroid.position.y, source.centroid.position.z);
-    positions.setXYZ(1, view.centroid.position.x, view.centroid.position.y, view.centroid.position.z);
+    positions.setXYZ(0, view.group.position.x, FLOOR_Y + 0.02, view.group.position.z);
+    positions.setXYZ(1, source.centroid.position.x, source.centroid.position.y, source.centroid.position.z);
     positions.needsUpdate = true;
     view.link.geometry.computeBoundingSphere();
+    view.link.computeLineDistances();
     view.link.visible = true;
+  }
+
+  function startManualReturn(view, source) {
+    view.returning = true;
+    const start = view.group.position.clone();
+    const target = new THREE.Vector3(source.centroid.position.x, FLOOR_Y + 0.016, source.centroid.position.z);
+    const startedAt = performance.now();
+
+    const tick = (now) => {
+      const t = Math.min((now - startedAt) / MANUAL_RETURN_DURATION_MS, 1);
+      const eased = t * t * (3 - 2 * t);
+      view.group.position.lerpVectors(start, target, eased);
+      updateManualLink(view);
+      if (t < 1) {
+        view.returnFrame = requestAnimationFrame(tick);
+        return;
+      }
+      view.returnFrame = undefined;
+      source.manualSource = false;
+      source.color.setHex(idColorValue(view.id));
+      if (source.labelText) {
+        replaceLabelTexture(source.label, source.labelText, source.color);
+        source.labelColorHex = source.color.getHex();
+      }
+      applyInteractionStyle(source);
+      disposeManualView(view);
+      manualViews.delete(view.id);
+    };
+    view.returnFrame = requestAnimationFrame(tick);
   }
 
   function refreshManualLinks() {
@@ -1170,11 +1344,14 @@ export function createViewer(host) {
   }
 
   function disposeManualView(view) {
-    manualGroup.remove(view.link, view.box, view.centroid, view.label);
+    if (view.returnFrame) cancelAnimationFrame(view.returnFrame);
+    manualGroup.remove(view.group, view.link);
+    view.points.geometry.dispose();
+    view.points.material.dispose();
+    view.centroid.material.dispose();
+    view.donut.material.dispose();
     view.link.geometry.dispose();
     view.link.material.dispose();
-    view.box.material.dispose();
-    view.centroid.material.dispose();
     disposeLabel(view.label);
   }
 
@@ -1304,15 +1481,21 @@ export function createViewer(host) {
     pointGroup.visible = points;
     vectorGroup.visible = vectors;
     for (const view of views.values()) {
-      view.lookAtMarker.visible = vectors && view.lookAtMarker.userData.hasDirection;
+      view.lookAtMarker.visible = vectors
+        && view.key === selectedClusterKey
+        && !view.manualSource
+        && view.lookAtMarker.userData.hasDirection;
     }
     labelGroup.visible = clusters || points;
     applySetupVisibility();
+    refreshInteractionStyles();
   }
 
   function clearTracking() {
     for (const view of views.values()) disposeView(view);
     views.clear();
+    for (const view of manualViews.values()) disposeManualView(view);
+    manualViews.clear();
 
     zoneRenderer.clearPresence();
   }
@@ -1333,7 +1516,7 @@ export function createViewer(host) {
   }
 
   function disposeView(view) {
-    clusterGroup.remove(view.box, view.centroid);
+    clusterGroup.remove(view.box, view.centroid, view.groundDonut);
     vectorGroup.remove(view.velocity);
     pointGroup.remove(view.points);
     labelGroup.remove(view.label);
@@ -1342,6 +1525,7 @@ export function createViewer(host) {
     view.hitbox.material.dispose();
     view.lookAtMarker.material.dispose();
     view.centroid.material.dispose();
+    view.groundDonut.material.dispose();
     view.points.geometry.dispose();
     view.points.material.dispose();
 
@@ -1355,23 +1539,71 @@ export function createViewer(host) {
 
   renderer.domElement.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
+    const key = pickClusterAt(event.clientX, event.clientY);
     pickGesture = {
       pointerId: event.pointerId,
+      key,
       x: event.clientX,
-      y: event.clientY
+      y: event.clientY,
+      dragging: false
     };
+    if (key) renderer.domElement.setPointerCapture?.(event.pointerId);
   });
+
+  renderer.domElement.addEventListener('pointermove', (event) => {
+    if (!pickGesture || pickGesture.pointerId !== event.pointerId || !pickGesture.key) return;
+    const distance = Math.hypot(event.clientX - pickGesture.x, event.clientY - pickGesture.y);
+    if (!pickGesture.dragging && distance >= PICK_MAX_MOVEMENT_PX) {
+      pickGesture.dragging = true;
+      clusterDragHandler?.({
+        phase: 'start',
+        key: pickGesture.key,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        floorPoint: raycastFloor(event.clientX, event.clientY)
+      });
+    }
+    if (!pickGesture.dragging) return;
+    event.preventDefault();
+    clusterDragHandler?.({
+      phase: 'move',
+      key: pickGesture.key,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      floorPoint: raycastFloor(event.clientX, event.clientY)
+    });
+  }, { passive: false });
 
   renderer.domElement.addEventListener('pointerup', (event) => {
     if (!pickGesture || pickGesture.pointerId !== event.pointerId) return;
     const gesture = pickGesture;
     pickGesture = null;
-    if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > PICK_MAX_MOVEMENT_PX) return;
-    const key = pickClusterAt(event.clientX, event.clientY);
-    if (key) clusterSelectionHandler?.(key);
+    if (renderer.domElement.hasPointerCapture?.(event.pointerId)) {
+      renderer.domElement.releasePointerCapture?.(event.pointerId);
+    }
+    if (gesture.dragging) {
+      clusterDragHandler?.({
+        phase: 'end',
+        key: gesture.key,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        floorPoint: raycastFloor(event.clientX, event.clientY)
+      });
+      return;
+    }
+    if (gesture.key) clusterSelectionHandler?.(gesture.key);
   });
 
-  renderer.domElement.addEventListener('pointercancel', () => {
+  renderer.domElement.addEventListener('pointercancel', (event) => {
+    if (pickGesture?.dragging && pickGesture.key) {
+      clusterDragHandler?.({
+        phase: 'cancel',
+        key: pickGesture.key,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        floorPoint: raycastFloor(event.clientX, event.clientY)
+      });
+    }
     pickGesture = null;
   });
 
@@ -1406,7 +1638,7 @@ export function createViewer(host) {
     setVisibility,
     pickClusterAt,
     setClusterSelectionHandler,
-    setDropCluster,
+    setClusterDragHandler,
     setOperatorState
   };
 }
@@ -1459,6 +1691,8 @@ function setLeftHandedQuaternion(target, [x, y, z, w]) {
 
 function configureControls(controls) {
   controls.enableDamping = true;
+  controls.enableRotate = false;
+  controls.enablePan = false;
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;
   controls.rotateSpeed = 0.6;
@@ -1605,8 +1839,8 @@ function namedGroup(scene, name) {
   return group;
 }
 
-function objectColor(key, id) {
-  return new THREE.Color(clusterColorValue(key, id));
+function objectColor() {
+  return UNASSIGNED_COLOR.clone();
 }
 
 // Scene dimensions are magnitudes. Placement above preserves the requested

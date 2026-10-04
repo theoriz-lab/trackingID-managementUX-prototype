@@ -34,18 +34,20 @@ Additional behavior:
 
 ## Interaction
 
-- Every primary action must work by click/tap; drag is an accelerator, never the only path.
-- The 3D scene is an operator surface: cluster picking, selection highlighting and ID-to-cluster drops must stay synchronized with the ID store.
-- Manual takeover must keep the automatic estimate visible while drawing the operator-controlled proxy separately.
-- Use Pointer Events so drag/direct manipulation has one mouse/touch implementation.
-- Avoid hover-only affordances.
-- Keep targets comfortably usable on touch screens and preserve keyboard access on desktop.
-- Follow Pleiades FrontEnd3 tokens and interaction language rather than creating a separate visual system.
-- Treat slot visuals as semantic layers: occupancy controls the fill, the shared cluster color identifies the occupant, lock controls the frame/padlock, and selection uses a neutral outline. Do not overload one color with multiple meanings.
-- Cluster colors must come from `src/cluster-color.js`; never duplicate the palette or color-selection rule in the viewer or operator UI.
-- Solo is a renderer-level focus state, not only an ID-list style. When enabled solo slots exist, non-solo clusters, labels, point clouds, centroids, velocity vectors and manual proxies must all be strongly dimmed while every solo target stays fully legible.
-- A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display the reserved identity name on a temporary override cluster.
-- Keep the ID list and live-cluster tray transparent over the 3D stage; do not reintroduce opaque panel/card backgrounds unless explicitly requested.
+- The 3D scene is the primary operator surface. Cluster picking, selection, drag and left-slot assignment must remain synchronized with the ID store.
+- **ID color is identity-of-output:** all assigned cluster visuals must derive their color from `src/id-colors.js`. Never derive operator colors from cluster UUID/source ID. Unassigned clusters are always neutral gray.
+- In the left list, the ID number and Solo button are fixed controls. Only the cluster capsule moves between slot wells.
+- Clicking the ID number toggles Enabled. The adjacent `S` toggles Solo. Keep both usable by mouse and touch.
+- Cluster capsules in the left list and bottom tray must keep a lightweight point-cloud silhouette preview and live centroid coordinates.
+- A normal live cluster bounding box, center centroid, floor donut and look-at decoration are **selection-only**. Hidden decoration must not become visible again merely because a global visibility flag changes.
+- Manual takeover is a floor-raycast interaction. The operator proxy is ID-colored, sparse-point only, and connected by a dashed line from its floor centroid to the live source centroid. The live source becomes gray and does not display a bounding box while takeover is active.
+- Ending Manual takeover must visually converge the proxy back to the live cluster using a smooth easing curve; do not introduce a positional jump.
+- Solo is a renderer-level focus state. Non-Solo clusters, point clouds, labels, vectors and manual proxies must all dim together while every active Solo target remains legible.
+- A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display a reserved identity name on a temporary operator override.
+- Orbit is controlled by the camera cube. Keep direct OrbitControls rotate/pan disabled so cluster dragging cannot accidentally orbit the scene. Wheel/touch zoom may remain available unless explicitly changed.
+- Bottom-tray right-click reassignment is an accelerator; ordinary capsule drag/drop remains available for touch-capable workflows.
+- Use Pointer Events for direct manipulation and preserve touch scrolling/long-hold behavior where the UI needs both scrolling and dragging.
+- Keep the left controls and bottom tray visually lightweight over the 3D stage; do not restore a permanent right-side inspector without an explicit product decision.
 
 ## Validation
 
@@ -55,4 +57,4 @@ Before considering a change ready:
 2. Run all Node tests, especially `tests/id-store.test.mjs`.
 3. Build/test the pinned SDK when SDK-facing behavior changes.
 4. Assemble the Pages artifact and verify it contains no runtime CDN dependency.
-5. Manually qualify mouse and touch selection, cluster→ID, ID→cluster, ID→ID swap, Lock & Learn, warnings, manual X/Z takeover, mobile panels, orbit/pan/zoom and reconnect behavior.
+5. Manually qualify mouse/touch 3D selection, 3D→ID drag, capsule→ID drag/reassignment, bottom-tray right-click assignment, Enabled/Solo, Lock & Learn, Manual ground takeover + smooth return, camera-cube orbit, mobile layout and reconnect behavior.

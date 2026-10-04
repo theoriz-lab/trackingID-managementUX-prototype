@@ -1,9 +1,11 @@
 import { ClusterState } from 'augmenta-client-sdk';
 import { APP_VERSION } from './app-info.js';
+import { createCameraCube } from './camera-cube.js';
 import { createConnectionController } from './connection.js';
 import { createIdInterface } from './id-interface.js';
 import { createIdStore } from './id-store.js';
 import { createSetupStore } from './setup-store.js';
+import { samplePointPreview } from './point-preview.js';
 import { readConnectionOptionsFromUrl } from './share-link.js';
 import { createViewer } from './viewer.js';
 
@@ -28,22 +30,21 @@ viewer.setVisibility({
 const setupStore = createSetupStore();
 let idInterface;
 const idStore = createIdStore({
-  onChange: (snapshot, reason) => {
+  onChange: (snapshot) => {
     viewer.setOperatorState(snapshot);
-    if (reason === 'manual-position') idInterface?.updateManualPosition(snapshot);
-    else idInterface?.render();
+    idInterface?.render();
   }
 });
-idInterface = createIdInterface({
-  store: idStore,
-  pickClusterAt: (x, y) => viewer.pickClusterAt(x, y),
-  setDropCluster: (key) => viewer.setDropCluster(key)
-});
-viewer.setClusterSelectionHandler((key) => {
-  idStore.selectCluster(key);
-  idInterface.openInspector();
-});
+idInterface = createIdInterface({ store: idStore });
+
+viewer.setClusterSelectionHandler((key) => idStore.selectCluster(key));
+viewer.setClusterDragHandler((event) => idInterface.handle3dClusterDrag(event));
 viewer.setOperatorState(idStore.snapshot());
+
+const cameraCube = createCameraCube({
+  element: document.querySelector('#camera-cube'),
+  viewer
+});
 
 let hasInitialCameraFrame = false;
 let lastSceneLabel = '';
@@ -101,14 +102,19 @@ function normalizeTrackedObjects(frame) {
       ghost: cluster.getState() === ClusterState.Ghost,
       sceneAddress,
       centroid: cluster.getCentroid(),
-      size: cluster.getBoundingBoxSize()
+      size: cluster.getBoundingBoxSize(),
+      preview: object.hasPointCloud()
+        ? samplePointPreview(object.getPointCloud().getPointsData())
+        : []
     }];
   });
 }
 
 function handleFrame(frame) {
+  const items = normalizeTrackedObjects(frame);
   viewer.renderFrame(frame);
-  idStore.syncFrame(normalizeTrackedObjects(frame));
+  idStore.syncFrame(items);
+  idInterface.updateTracking(items);
 }
 
 function handleConnectionState(state) {
@@ -122,6 +128,7 @@ function handleConnectionState(state) {
       disconnectCleanupTimer = undefined;
       viewer.clearTracking();
       idStore.syncFrame([]);
+      idInterface.updateTracking([]);
     }, DISCONNECT_CLEANUP_DELAY_MS);
   }
 }
@@ -136,6 +143,9 @@ const connection = createConnectionController({
 
 connection.start();
 
-window.addEventListener('pagehide', () => connection.stop(), { once: true });
+window.addEventListener('pagehide', () => {
+  cameraCube.destroy();
+  connection.stop();
+}, { once: true });
 
 console.info(`Augmenta ID Management prototype ${APP_VERSION}`);

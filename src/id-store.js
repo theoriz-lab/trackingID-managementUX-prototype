@@ -20,7 +20,10 @@ function cloneCluster(cluster) {
   return {
     ...cluster,
     centroid: [...cluster.centroid],
-    size: [...cluster.size]
+    size: [...cluster.size],
+    preview: Array.isArray(cluster.preview)
+      ? cluster.preview.map((point) => Array.isArray(point) ? [...point] : point)
+      : []
   };
 }
 
@@ -150,6 +153,9 @@ export function createIdStore({ count = DEFAULT_ID_COUNT, onChange } = {}) {
         sceneAddress: String(item.sceneAddress ?? ''),
         centroid: Array.isArray(item.centroid) ? item.centroid.slice(0, 3).map(Number) : [0, 0, 0],
         size: Array.isArray(item.size) ? item.size.slice(0, 3).map(Number) : [0, 0, 0],
+        preview: Array.isArray(item.preview)
+          ? item.preview.map((point) => Array.isArray(point) ? point.slice(0, 2).map(Number) : point)
+          : [],
         lastSeen: now
       };
 
@@ -345,7 +351,7 @@ export function createIdStore({ count = DEFAULT_ID_COUNT, onChange } = {}) {
     slot.manual = next;
     if (next) {
       const cluster = getCluster(slot.clusterKey);
-      if (cluster) slot.manualPosition = [...cluster.centroid];
+      if (cluster) slot.manualPosition = [cluster.centroid[0], 0, cluster.centroid[2]];
     }
     publish('manual');
     return true;

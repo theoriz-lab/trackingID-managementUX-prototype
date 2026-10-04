@@ -19,27 +19,22 @@ Identity recognition itself is **not implemented here**: the prototype currently
 
 ## UX
 
-- Desktop and touch/mobile use the same pointer interaction model.
-- Click/tap a cluster directly in the **3D view** to select it and open its operator actions.
-- Drag a **cluster → ID** from the live-cluster tray to assign it.
-- Drag an **ID → cluster** either onto the live-cluster tray or directly onto the cluster in the 3D view.
-- Drag an **ID → ID** to swap assignments.
-- Tapping/clicking always offers the same actions in the inspector, so drag is never required.
-- Occupied-ID reassignment kicks the previous cluster to the next eligible free ID.
-- Locked identities reserve their ID while absent.
-- An explicit operator assignment has priority over Identity Lock while that override cluster remains present; the locked identity can reclaim its ID after the override leaves.
-- If Lock & Learn replaces an older learned identity, its stale identity name is cleared rather than being carried onto the new person.
-- Locking an empty slot puts it in a learn state; the next cluster explicitly assigned there becomes the identity.
-- **Lock active** locks only currently occupied IDs, leaving spare slots allocatable for the common LBE workflow.
-- Selecting an ID or cluster highlights the corresponding tracked person in 3D.
-- Slot visuals use a strict operator grammar: gray means empty, an occupied slot inherits the exact live cluster color, enabled empty slots keep a small green activity cue, and disabled slots are visibly muted.
-- Lock is a separate visual layer: a closed padlock plus an amber frame. A locked empty/reserved slot stays gray so occupancy and reservation cannot be confused.
-- Selection uses a neutral white outline instead of replacing the cluster color. Solo dims non-solo slots, while Manual and Override remain explicit secondary badges.
-- Desktop operator controls float over the live 3D view: the ID list and live-cluster tray have transparent surfaces, while the inspector keeps only a light alpha/blur layer for control readability.
-- Solo is a true spatial focus mode: with one or more enabled solo slots, every non-solo tracked cluster is reduced to only a few percent opacity in 3D; multiple solo targets stay fully visible together.
-- A learned identity name is drawn above its matching cluster in 3D with the public ID underneath. Identity names never follow a temporary operator override.
-- Manual takeover uses a direct X/Z touch pad, keeps the tracked cluster association in the background, and draws a separate manual proxy linked to the automatic estimate.
-- Keyboard: `L` toggles Lock & Learn, `M` toggles Manual takeover, `Esc` clears the selection.
+The current prototype is intentionally **3D-first**. There is no right-side inspector: the live spatial view stays dominant and the left ID list plus bottom live-cluster tray carry the operator workflow.
+
+- **Colors belong to public IDs, not clusters.** IDs use a fixed punchy palette from `src/id-colors.js`; an unassigned cluster is neutral gray. The same ID color is reused in the left capsule, bottom tray and 3D representation.
+- The left list is a stable slot structure: the **ID number never moves**, clicking it enables/disables that slot, the adjacent **S** button toggles Solo, and only the cluster capsule is draggable between slots.
+- An empty slot is a hollow capsule-shaped well. Dropping a cluster capsule into it assigns that cluster to the ID. Dropping on an occupied slot uses the existing operator reassignment/displacement rules.
+- **Lock all active** and **Unlock all active** sit above the ID list. Each slot also keeps a compact Lock & Learn control.
+- Every left and bottom cluster capsule shows a small live point-cloud silhouette plus the current centroid coordinates `x / y / z`.
+- Right-clicking a cluster in the bottom tray opens a compact ID reassignment menu. Identity naming and unassignment are also available there when relevant.
+- Clicking/tapping a cluster in the **3D view** selects it. The cluster bounding box, center centroid and a small donut marker projected onto the floor are drawn only for the selected live cluster.
+- Assigned clusters use their ID color in 3D; unassigned clusters are gray. A learned identity name is displayed above the matching cluster with the public ID underneath.
+- **Solo is a spatial focus mode:** every enabled Solo target stays fully legible while non-Solo clusters, point clouds, labels and manual proxies are reduced to only a few percent opacity.
+- Dragging an assigned cluster directly in the 3D view starts **Manual takeover**. The pointer is raycast onto the floor, producing an ID-colored sparse-point proxy with a floor centroid/donut. The live tracked source stays gray and loses its selected-cluster decoration.
+- During Manual takeover, a dashed line links the floor proxy to the live source centroid and the corresponding left capsule pulses. Dragging the 3D cluster onto a left slot can reassign it while preserving the ground takeover position.
+- Releasing Manual takeover with the return control animates the proxy back toward the live tracked position with a smooth acceleration/deceleration curve rather than jumping.
+- Camera orbit is intentionally restricted to the **camera cube** in the upper-right. Drag the cube to orbit or click its faces for orthographic presets. Direct canvas orbit/pan is disabled so cluster manipulation owns the 3D pointer gesture.
+- Keyboard: `L` toggles Lock & Learn for the selected assignment, `M` toggles Manual takeover, and `Esc` clears selection/context UI.
 
 ## Live connection
 
