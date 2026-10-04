@@ -56,5 +56,5 @@ test('matching identities render above their public ID', () => {
     identityName: 'Singer A'
   };
 
-  assert.equal(operatorLabelForCluster(slot, 'singer-a'), 'Singer A\\nID 4');
+  assert.equal(operatorLabelForCluster(slot, 'singer-a'), 'Singer A\nID 4');
 });
