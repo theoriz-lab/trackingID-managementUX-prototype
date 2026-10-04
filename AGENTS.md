@@ -32,6 +32,8 @@ Additional behavior:
 ## Interaction
 
 - Every primary action must work by click/tap; drag is an accelerator, never the only path.
+- The 3D scene is an operator surface: cluster picking, selection highlighting and ID-to-cluster drops must stay synchronized with the ID store.
+- Manual takeover must keep the automatic estimate visible while drawing the operator-controlled proxy separately.
 - Use Pointer Events so drag/direct manipulation has one mouse/touch implementation.
 - Avoid hover-only affordances.
 - Keep targets comfortably usable on touch screens and preserve keyboard access on desktop.
