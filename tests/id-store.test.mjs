@@ -155,3 +155,42 @@ test('a selected cluster is cleared when it leaves tracking', () => {
 
   assert.equal(store.snapshot().selected, null);
 });
+
+
+test('operator assignment keeps priority over identity lock while the override cluster is present', () => {
+  const store = createIdStore({ count: 3 });
+  store.syncFrame([cluster('alice', 1), cluster('bob', 2)]);
+  store.setIdentityName(1, 'Alice');
+  store.lockAndLearn(1);
+
+  store.assignClusterToId('bob', 1);
+  let state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'bob');
+  assert.equal(state.slots[1].clusterKey, 'alice');
+
+  store.syncFrame([cluster('alice', 1), cluster('bob', 2)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'bob');
+  assert.equal(state.slots[1].clusterKey, 'alice');
+
+  store.syncFrame([cluster('alice', 1)]);
+  store.syncFrame([cluster('alice', 1)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'alice');
+});
+
+test('learning a different identity clears the stale identity name', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('alice', 1)]);
+  store.setIdentityName(1, 'Alice');
+  store.lockAndLearn(1);
+  store.unlock(1);
+
+  store.syncFrame([]);
+  store.syncFrame([cluster('bob', 1)]);
+  store.lockAndLearn(1);
+
+  const state = store.snapshot();
+  assert.equal(state.slots[0].identityKey, 'bob');
+  assert.equal(state.slots[0].identityName, '');
+});
