@@ -44,14 +44,14 @@ jobs:
         run: |
           npm install --prefix .pages-runtime --no-save --no-package-lock --ignore-scripts three@0.186.1
 
-      - name: Validate example JavaScript
+      - name: Validate prototype JavaScript
         shell: bash
         run: |
           for file in src/*.js tests/*.mjs scripts/*.mjs; do
             node --input-type=module --check < "$file"
           done
 
-      - name: Test example
+      - name: Test prototype
         shell: bash
         run: |
           mkdir -p node_modules
