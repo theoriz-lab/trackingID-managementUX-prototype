@@ -54,6 +54,25 @@ function assignedSlotForCluster(snapshot, key) {
   return snapshot.slots.find((slot) => slot.clusterKey === key);
 }
 
+function identityWarning(slot) {
+  if (!slot.enabled || !slot.locked || !slot.identityKey) return null;
+  if (!slot.clusterKey) {
+    return {
+      type: 'missing',
+      label: 'Identity missing',
+      detail: 'Locked identity is reserved but currently missing.'
+    };
+  }
+  if (slot.clusterKey !== slot.identityKey) {
+    return {
+      type: 'override',
+      label: 'Identity overridden',
+      detail: 'A different cluster is temporarily assigned to this locked identity.'
+    };
+  }
+  return null;
+}
+
 export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
   const idList = document.querySelector('#id-list');
   const clusterTray = document.querySelector('#cluster-tray');
@@ -83,6 +102,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
       const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
       const selected = snapshot.selected?.type === 'id' && snapshot.selected.id === slot.id;
       const identity = slot.identityName || (slot.identityKey ? `Identity ${slot.id}` : '');
+      const warning = identityWarning(slot);
       const detail = state === 'assigned' || state === 'manual'
         ? shortClusterName(cluster)
         : state === 'reserved'
@@ -104,6 +124,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
           </button>
           <div class="id-flags" aria-label="ID ${slot.id} flags">
             ${slot.locked ? '<span class="mini-flag accent">LOCK</span>' : ''}
+            ${warning?.type === 'override' ? '<span class="mini-flag warning">OVERRIDE</span>' : ''}
             ${slot.solo ? '<span class="mini-flag solo">SOLO</span>' : ''}
             ${slot.manual ? '<span class="mini-flag">MANUAL</span>' : ''}
           </div>
@@ -136,13 +157,12 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
     liveCount.textContent = `${visibleClusters.length} live`;
     slotCount.textContent = `${snapshot.slots.length} IDs`;
 
-    const warnings = snapshot.slots.filter((slot) => {
-      if (!slot.enabled || !slot.locked || !slot.identityKey || slot.clusterKey) return false;
-      return true;
-    });
+    const warnings = snapshot.slots
+      .map((slot) => ({ slot, warning: identityWarning(slot) }))
+      .filter(({ warning }) => warning);
     warningButton.hidden = warnings.length === 0;
     warningButton.textContent = warnings.length === 1 ? '1 warning' : `${warnings.length} warnings`;
-    warningButton.dataset.firstWarningId = warnings[0]?.id ?? '';
+    warningButton.dataset.firstWarningId = warnings[0]?.slot.id ?? '';
 
     renderInspector(snapshot, clusterByKey);
   }
@@ -153,6 +173,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
       if (!slot) return renderEmptyInspector(snapshot);
       const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
       const state = slotState(slot, clusterByKey);
+      const warning = identityWarning(slot);
       const position = slot.manualPosition;
       const padX = 50 + (position[0] / MANUAL_PAD_HALF_RANGE_M) * 50;
       const padY = 50 - (position[2] / MANUAL_PAD_HALF_RANGE_M) * 50;
@@ -182,7 +203,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
             <button type="button" class="control-button${slot.locked ? ' active' : ''}" data-action="toggle-lock" data-id="${slot.id}">${slot.locked ? 'Unlock identity' : 'Lock & learn'}</button>
             <button type="button" class="control-button" data-action="clear-identity" data-id="${slot.id}" ${slot.identityKey || slot.identityName ? '' : 'disabled'}>Clear identity</button>
           </div>
-          ${slot.locked && !slot.clusterKey && slot.identityKey ? '<p class="inline-warning">Identity is reserved but currently missing.</p>' : ''}
+          ${warning ? `<p class="inline-warning">${escapeHtml(warning.detail)}</p>` : ''}
           ${slot.pendingLearn ? '<p class="muted-copy">Locked empty slot: the next cluster assigned here will become its learned identity.</p>' : ''}
         </section>
 
@@ -252,7 +273,9 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
   }
 
   function renderEmptyInspector(snapshot) {
-    const warnings = snapshot.slots.filter((slot) => slot.enabled && slot.locked && slot.identityKey && !slot.clusterKey);
+    const warnings = snapshot.slots
+      .map((slot) => ({ slot, warning: identityWarning(slot) }))
+      .filter(({ warning }) => warning);
     inspector.innerHTML = `
       <div class="inspector-heading">
         <div>
@@ -270,7 +293,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
         <section class="inspector-section">
           <div class="section-title">Warnings</div>
           <div class="warning-list">
-            ${warnings.map((slot) => `<button type="button" data-action="select-id" data-id="${slot.id}"><span>◌</span><strong>ID ${slot.id}</strong><small>${escapeHtml(slot.identityName || `Identity ${slot.id}`)} missing</small></button>`).join('')}
+            ${warnings.map(({ slot, warning }) => `<button type="button" data-action="select-id" data-id="${slot.id}"><span>◌</span><strong>ID ${slot.id}</strong><small>${escapeHtml(slot.identityName || `Identity ${slot.id}`)} · ${escapeHtml(warning.label)}</small></button>`).join('')}
           </div>
         </section>` : ''}`;
   }

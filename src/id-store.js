@@ -79,12 +79,19 @@ export function createIdStore({ count = DEFAULT_ID_COUNT, onChange } = {}) {
     return isAutoEligible(slot) ? slot : null;
   }
 
+  function setLearnedIdentity(slot, clusterKey) {
+    if (!clusterKey) return false;
+    const changed = slot.identityKey !== clusterKey;
+    if (changed && slot.identityKey) slot.identityName = '';
+    slot.identityKey = clusterKey;
+    slot.pendingLearn = false;
+    return changed;
+  }
+
   function learnIdentityIfNeeded(slot, clusterKey) {
     if (!slot.locked || !clusterKey) return false;
     if (slot.identityKey && !slot.pendingLearn) return false;
-    slot.identityKey = clusterKey;
-    slot.pendingLearn = false;
-    return true;
+    return setLearnedIdentity(slot, clusterKey);
   }
 
   function assignClusterInternal(clusterKey, targetSlot, { operator = false } = {}) {
@@ -156,7 +163,7 @@ export function createIdStore({ count = DEFAULT_ID_COUNT, onChange } = {}) {
       if (heldClusters.has(key)) continue;
 
       const identitySlot = slotForIdentity(key);
-      if (identitySlot && identitySlot.clusterKey !== key) {
+      if (identitySlot && identitySlot.clusterKey !== key && !identitySlot.clusterKey) {
         const result = assignClusterInternal(key, identitySlot);
         changed ||= result.ok && result.moved;
         continue;
@@ -257,8 +264,7 @@ export function createIdStore({ count = DEFAULT_ID_COUNT, onChange } = {}) {
     if (!slot) return false;
     slot.locked = true;
     if (slot.clusterKey) {
-      slot.identityKey = slot.clusterKey;
-      slot.pendingLearn = false;
+      setLearnedIdentity(slot, slot.clusterKey);
     } else if (!slot.identityKey) {
       slot.pendingLearn = true;
     }
@@ -280,8 +286,7 @@ export function createIdStore({ count = DEFAULT_ID_COUNT, onChange } = {}) {
     for (const slot of slots) {
       if (!slot.enabled || !slot.clusterKey) continue;
       slot.locked = true;
-      slot.pendingLearn = false;
-      slot.identityKey = slot.clusterKey;
+      setLearnedIdentity(slot, slot.clusterKey);
       changed = true;
     }
     if (changed) publish('lock-all');

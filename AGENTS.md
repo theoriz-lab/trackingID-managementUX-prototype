@@ -24,6 +24,8 @@ Additional behavior:
 - Default allocation uses the next eligible free ID.
 - A disabled, occupied, identity-reserved or manually reserved ID is not automatically eligible.
 - Explicit operator reassignment may override the normal allocator.
+- An occupied Identity-Locked ID is an explicit operator override; ReID must not steal it while that override cluster remains present.
+- Learning a different identity must not retain the previous identity's name.
 - Dropping a cluster on an occupied ID moves the displaced cluster to the next eligible free ID when possible.
 - Lock & Learn on an occupied ID learns that cluster; on an empty ID it waits for the next explicit assignment.
 - Lock active affects occupied IDs only so spare slots remain free.
