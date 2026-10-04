@@ -189,15 +189,15 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
         <section class="inspector-section">
           <div class="section-title">Output</div>
           <div class="toggle-row">
-            <span><strong>Enabled</strong><small>Publish this ID to outputs</small></span>
+            <span><strong>Enabled</strong><small>Include this ID in the prototype output state</small></span>
             <button type="button" class="switch${slot.enabled ? ' on' : ''}" role="switch" aria-checked="${slot.enabled}" data-action="toggle-enabled" data-id="${slot.id}"><i></i></button>
           </div>
           <div class="toggle-row">
-            <span><strong>Solo</strong><small>Publish only solo IDs when any solo is active</small></span>
+            <span><strong>Solo</strong><small>Keep only solo IDs in the prototype output state</small></span>
             <button type="button" class="switch${slot.solo ? ' on' : ''}" role="switch" aria-checked="${slot.solo}" data-action="toggle-solo" data-id="${slot.id}"><i></i></button>
           </div>
           <div class="toggle-row">
-            <span><strong>Manual takeover</strong><small>Override published position locally</small></span>
+            <span><strong>Manual takeover</strong><small>Preview an operator-controlled output position locally</small></span>
             <button type="button" class="switch${slot.manual ? ' on' : ''}" role="switch" aria-checked="${slot.manual}" data-action="toggle-manual" data-id="${slot.id}"><i></i></button>
           </div>
           ${slot.manual ? `
@@ -261,7 +261,7 @@ export function createIdInterface({ store, pickClusterAt, setDropCluster }) {
         </div>
       </div>
       <section class="inspector-section intro-copy">
-        <p>Select an ID or a live cluster to edit it. On desktop or touch, drag an ID onto a cluster or a cluster onto an ID for a direct reassignment.</p>
+        <p>Select an ID or click/tap a cluster in the 3D view to edit it. Drag an ID directly onto a 3D cluster, or use the live-cluster tray for the same actions.</p>
         <div class="shortcut-row"><kbd>L</kbd><span>Lock / unlock selected ID</span></div>
         <div class="shortcut-row"><kbd>M</kbd><span>Manual takeover selected ID</span></div>
         <div class="shortcut-row"><kbd>Esc</kbd><span>Clear selection</span></div>
