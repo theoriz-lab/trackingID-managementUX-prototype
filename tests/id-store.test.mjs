@@ -463,3 +463,23 @@ test('Shift-deselecting the slot selected through its cluster clears that visual
   assert.deepEqual(state.selectedSlotIds, []);
   assert.equal(state.selected, null);
 });
+
+
+test('Manual takeover cannot start on an empty visible slot', () => {
+  const store = createIdStore({ count: 2 });
+  assert.equal(store.setManual(1, true), false);
+  assert.equal(store.snapshot().slots[0].manual, false);
+});
+
+test('unchanged Manual position does not publish a redundant update', () => {
+  const reasons = [];
+  const store = createIdStore({ count: 1, onChange: (_snapshot, reason) => reasons.push(reason) });
+  const tracked = cluster('a', 1);
+  tracked.centroid = [1, 1, 2];
+  store.syncFrame([tracked]);
+  store.setManual(1, true);
+  reasons.length = 0;
+
+  assert.equal(store.setManualPosition(1, [1, 0, 2]), false);
+  assert.deepEqual(reasons, []);
+});
