@@ -503,7 +503,7 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   user-select: none;
   touch-action: pan-y;
   cursor: grab;
-  transition: border-color var(--motion-fast), background var(--motion-fast), opacity var(--motion-fast), transform var(--motion-fast);
+  transition: border-color var(--motion-fast), background var(--motion-fast), opacity var(--motion-fast), transform var(--motion-fast), filter var(--motion-fast), box-shadow var(--motion-base);
 }
 .cluster-capsule:hover {
   border-color: var(--capsule-color);
@@ -513,12 +513,25 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
     0 0 21px color-mix(in srgb, var(--capsule-color) 24%, transparent);
 }
 .cluster-capsule.selected {
-  outline: 1px solid rgba(255,255,255,.88);
+  outline: 1px solid color-mix(in srgb, var(--capsule-color) 86%, white 14%);
   outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--capsule-color) 92%, white 8%);
+  background: color-mix(in srgb, var(--capsule-color) 19%, rgba(7,12,20,.64));
   box-shadow:
     inset 3px 0 0 var(--capsule-color),
-    inset 0 0 20px color-mix(in srgb, var(--capsule-color) 12%, transparent),
-    0 0 25px color-mix(in srgb, var(--capsule-color) 34%, transparent);
+    inset 0 0 24px color-mix(in srgb, var(--capsule-color) 19%, transparent),
+    0 0 11px color-mix(in srgb, var(--capsule-color) 55%, transparent),
+    0 0 30px color-mix(in srgb, var(--capsule-color) 38%, transparent);
+}
+
+.cluster-tray.has-selection .cluster-capsule:not(.selected) {
+  opacity: .20;
+  filter: saturate(.38) brightness(.62);
+}
+
+.cluster-tray.has-selection .cluster-capsule.selected {
+  opacity: 1;
+  filter: none;
 }
 .cluster-capsule.unassigned {
   border-color: rgba(160, 176, 198, .32);
