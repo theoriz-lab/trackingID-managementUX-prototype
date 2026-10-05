@@ -583,6 +583,8 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   text-shadow: 0 0 8px color-mix(in srgb, var(--capsule-color) 62%, transparent);
 }
 .cluster-capsule.disabled.selected {
+  opacity: 1;
+  filter: grayscale(1);
   border-color: rgba(255,255,255,.78);
   outline-color: rgba(255,255,255,.72);
   box-shadow:
