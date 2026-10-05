@@ -6,8 +6,14 @@ export function samplePointPreview(pointData, limit = 72, {
   const pointCount = Math.floor(data.length / 3);
   if (pointCount <= 0 || limit <= 0) return [];
 
-  const [cx = 0, cy = 0, cz = 0] = center.map(Number);
-  let [fx = 0, , fz = 1] = lookAt.map(Number);
+  const centerValues = center && typeof center[Symbol.iterator] === 'function'
+    ? Array.from(center, Number)
+    : [0, 0, 0];
+  const lookAtValues = lookAt && typeof lookAt[Symbol.iterator] === 'function'
+    ? Array.from(lookAt, Number)
+    : [0, 0, 1];
+  const [cx = 0, cy = 0, cz = 0] = centerValues;
+  let [fx = 0, , fz = 1] = lookAtValues;
   const horizontalLength = Math.hypot(fx, fz);
   if (!Number.isFinite(horizontalLength) || horizontalLength < 1e-6) {
     fx = 0;
