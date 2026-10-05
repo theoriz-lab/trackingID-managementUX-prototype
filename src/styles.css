@@ -74,10 +74,9 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   overflow: hidden;
   border: 1px solid rgba(134, 173, 226, .26);
   border-radius: 14px;
-  background:
-    linear-gradient(180deg, rgba(11, 18, 29, .66), rgba(8, 13, 22, .35));
-  box-shadow: 0 18px 55px rgba(0,0,0,.22);
-  backdrop-filter: blur(11px) saturate(1.05);
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 .id-panel-header {
   min-height: 68px;
@@ -386,7 +385,33 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
     inset 0 0 15px color-mix(in srgb, var(--id-color) 8%, transparent),
     0 0 13px color-mix(in srgb, var(--id-color) 12%, transparent);
 }
-.slot-row.disabled { opacity: .48; filter: saturate(.22); }
+.slot-row.disabled { opacity: 1; filter: none; }
+.slot-row.disabled .slot-id-button,
+.slot-row.disabled .slot-solo-button,
+.slot-row.disabled .slot-manual-button,
+.slot-row.disabled .slot-delete-button {
+  border-color: rgba(160, 176, 198, .20);
+  background: rgba(19, 24, 31, .34);
+  color: #747d89;
+  box-shadow: none;
+  text-shadow: none;
+}
+.slot-row.disabled .slot-well {
+  border-color: rgba(160, 176, 198, .30);
+  background: rgba(20, 24, 30, .24);
+}
+.slot-row.disabled .cluster-capsule {
+  --capsule-color: #8a909b !important;
+  border-color: rgba(160, 176, 198, .30);
+  background: rgba(19, 23, 29, .38);
+  box-shadow: inset 3px 0 0 rgba(138,144,155,.56);
+  filter: grayscale(1);
+  opacity: .62;
+}
+.slot-row.selected .slot-well {
+  border: 2px solid rgba(255,255,255,.96);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 0 18px rgba(255,255,255,.16);
+}
 .slot-solo-button {
   align-self: center;
   height: 34px;
@@ -475,6 +500,20 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
 }
 .slot-lock-button:hover { background: rgba(20,30,46,.74); color: #dce8f7; }
 .slot-lock-button.active { color: var(--warning); }
+.slot-well.filled > .slot-lock-button { display: none; }
+
+.cluster-lock-button {
+  width: 28px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(3, 7, 13, .34);
+  color: #748297;
+}
+.cluster-lock-button:hover { color: #eef6ff; background: rgba(24,34,49,.72); }
+.cluster-lock-button.active { color: var(--warning); }
+.cluster-lock-button .lock-symbol { transform: scale(.82); }
 .slot-lock-button .lock-symbol { display: inline-block; vertical-align: middle; transform: scale(.82); }
 
 .cluster-capsule {
@@ -487,7 +526,7 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   grid-template-columns: 48px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
-  padding: 5px 37px 5px 6px;
+  padding: 5px 6px;
   border: 1px solid color-mix(in srgb, var(--capsule-color) 76%, rgba(255,255,255,.1));
   border-radius: 10px;
   background:
@@ -545,6 +584,14 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   color: var(--capsule-color);
 }
 .capsule-preview circle { fill: currentColor; opacity: .78; }
+.capsule-preview-frame {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .42;
+}
 .cluster-capsule.unassigned .capsule-preview { color: #8a909b; }
 .capsule-copy { min-width: 0; display: grid; gap: 2px; }
 .capsule-copy strong {
