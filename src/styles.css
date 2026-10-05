@@ -629,6 +629,13 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   color: rgba(225, 199, 236, .76);
   font-weight: 650;
 }
+.cluster-capsule.identity-reserved .capsule-assignment {
+  font-weight: 720;
+}
+.cluster-capsule.missing .capsule-assignment {
+  color: var(--warning);
+  font-weight: 760;
+}
 .cluster-capsule.missing.selected {
   opacity: 1;
 }

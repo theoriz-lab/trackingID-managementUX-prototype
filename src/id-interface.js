@@ -3,7 +3,8 @@ import {
   deriveOperatorVisualState,
   deriveSelectionState,
   identityNameForCluster,
-  operatorClusterName
+  operatorClusterName,
+  slotReservesClusterIdentity
 } from './operator-visual-state.js';
 
 const DRAG_START_DISTANCE_PX = 7;
@@ -117,12 +118,14 @@ export function createIdInterface({ store }) {
     const manual = Boolean(slot?.manual && cluster?.visible);
     const identityName = identityNameForCluster(cluster);
     const clusterLocked = Boolean(cluster?.identityLocked);
+    const identityReserved = slotReservesClusterIdentity(slot, cluster);
     const classes = [
       'cluster-capsule',
       slot ? 'assigned' : 'unassigned',
       disabled ? 'disabled' : '',
       missing ? 'missing' : '',
       clusterLocked ? 'identity-locked' : '',
+      identityReserved ? 'identity-reserved' : '',
       manual ? 'manual' : '',
       selected ? 'selected' : ''
     ].filter(Boolean).join(' ');
@@ -130,9 +133,9 @@ export function createIdInterface({ store }) {
       ? `data-drag-type="cluster" data-drag-key="${escapeHtml(cluster.key)}"`
       : '';
     const assignment = slot
-      ? missing
-        ? `ID ${slot.id} · reserved`
-        : clusterLocked
+      ? missing && identityReserved
+        ? `Missing · ID ${slot.id} reserved`
+        : identityReserved
           ? `ID ${slot.id} · locked`
           : `ID ${slot.id}`
       : clusterLocked
@@ -480,16 +483,17 @@ export function createIdInterface({ store }) {
     }
   });
 
-  document.addEventListener('contextmenu', (event) => {
-    const capsule = event.target.closest?.('#cluster-tray .cluster-capsule[data-cluster-key]');
-    if (!capsule) return;
+  clusterTray.addEventListener('contextmenu', (event) => {
+    const capsule = event.target.closest?.('.cluster-capsule[data-cluster-key]');
+    if (!capsule || !clusterTray.contains(capsule)) return;
     event.preventDefault();
+    event.stopPropagation();
     openClusterContextMenu(
       capsule.dataset.clusterKey,
       event.clientX,
       event.clientY
     );
-  });
+  }, { capture: true });
 
   contextMenu.addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-context-action]');
