@@ -24,9 +24,9 @@ The current prototype is intentionally **3D-first**. There is no right-side insp
 - **Colors belong to public IDs, not clusters.** IDs use a fixed punchy palette from `src/id-colors.js`; an unassigned cluster is neutral gray. The same ID color is reused in the left capsule, bottom tray and 3D representation.
 - The visual pass intentionally follows the approved reference image more closely: ID-colored capsules, selected states, active controls and Manual mode use restrained luminous glows while the panels remain translucent over the 3D scene.
 - The left list is a stable slot structure: the **ID number never moves**, clicking it enables/disables that slot, the adjacent **S** button toggles Solo, and only the cluster capsule is draggable between slots.
-- A fixed **M** button sits to the right of each slot well. It enters Manual takeover directly; when Manual is active the button and capsule pulse, and pressing **M** again returns smoothly to live tracking.
+- A fixed **M** button sits to the right of each slot well. It enters Manual takeover directly; while Manual is active a subtle ID-colored frame pulses around the **entire slot row**, and pressing **M** again returns smoothly to live tracking.
 - An empty slot is a hollow capsule-shaped well. Dropping a cluster capsule into it assigns that cluster to the ID. Dropping on an occupied slot uses the existing operator reassignment/displacement rules.
-- The bulk toolbar contains **Lock all active**, **Lock all**, **Unlock all**, and one dynamic **Enable all / Disable all** button. Every bulk operation acts on **visible slots only**.
+- The bulk toolbar keeps **Disable all / Enable all** and **Unlock all** in the left column, with **Lock all active** and **Lock all** on the right. The left output-state button shows **Enable all only when every visible slot is disabled**; otherwise it shows **Disable all**. Every bulk operation acts on **visible slots only**.
 - **Lock all active** learns/locks only occupied enabled visible IDs. **Lock all** locks every visible slot, including empty slots waiting for their next explicit assignment. **Unlock all** clears lock state on visible slots.
 - The header reports both the number of **visible slots** and the number of **active (enabled) visible slots**.
 - The cog menu exposes **Strict mode**, **Min ID**, **Max ID**, and **Allow slot deletion**.
@@ -38,7 +38,7 @@ The current prototype is intentionally **3D-first**. There is no right-side insp
 - Right-clicking a cluster in the bottom tray opens a compact ID reassignment menu. Identity naming and unassignment are also available there when relevant.
 - Clicking/tapping a cluster in the **3D view** selects it. The cluster bounding box, center centroid and a small donut marker projected onto the floor are drawn only for the selected live cluster.
 - Assigned clusters use their ID color in 3D; unassigned clusters are gray. A learned identity name is displayed above the matching cluster with the public ID underneath.
-- **Solo is a spatial focus mode:** every enabled visible Solo target stays fully legible while non-Solo clusters, point clouds, labels and manual proxies are reduced to only a few percent opacity.
+- **Solo is a spatial focus override:** every visible Solo target stays fully legible even when that ID is disabled, while non-Solo clusters, point clouds, labels and manual proxies are reduced to only a few percent opacity. Disabled state still controls allocation/output eligibility; it does not suppress Solo focus.
 - Dragging an assigned cluster directly in the 3D view starts **Manual takeover**. The pointer is raycast onto the floor, producing an ID-colored sparse-point proxy with a floor centroid/donut. The live tracked source stays gray and loses its selected-cluster decoration.
 - During Manual takeover, a dashed line links the floor proxy to the live source centroid. Dragging the 3D cluster onto a left slot can reassign it while preserving the ground takeover position.
 - Releasing Manual takeover animates the proxy back toward the live tracked position with a smooth acceleration/deceleration curve rather than jumping.
