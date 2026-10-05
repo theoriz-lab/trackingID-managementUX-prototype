@@ -113,3 +113,38 @@ test('selection derivation is shared between slots and clusters', () => {
   assert.deepEqual([...state.slotIds], [1, 2]);
   assert.deepEqual([...state.clusterKeys], ['a', 'b', 'free-cluster']);
 });
+
+
+test('a selected reserved slot selects its missing cached identity', () => {
+  const slots = [
+    {
+      id: 3,
+      visible: true,
+      clusterKey: null,
+      locked: true,
+      identityKey: 'pancake'
+    }
+  ];
+
+  const state = deriveSelectionState(slots, { type: 'id', id: 3 }, [3]);
+  assert.deepEqual([...state.slotIds], [3]);
+  assert.deepEqual([...state.clusterKeys], ['pancake']);
+});
+
+test('Solo focus follows a reserved identity while the live cluster is missing', () => {
+  const state = deriveOperatorVisualState([
+    {
+      id: 3,
+      visible: true,
+      enabled: false,
+      solo: true,
+      clusterKey: null,
+      locked: true,
+      identityKey: 'pancake'
+    }
+  ]);
+
+  assert.equal(state.soloMode, true);
+  assert.deepEqual([...state.soloSlotIds], [3]);
+  assert.deepEqual([...state.soloClusterKeys], ['pancake']);
+});
