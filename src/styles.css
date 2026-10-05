@@ -626,6 +626,32 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
     inset 3px 0 0 var(--capsule-color),
     0 0 21px color-mix(in srgb, var(--capsule-color) 24%, transparent);
 }
+.cluster-capsule.drop-preview-moving {
+  z-index: 18;
+  transform: translate3d(var(--drop-preview-x, 0), var(--drop-preview-y, 0), 0) scale(.985);
+  opacity: .82;
+  filter: saturate(1.08) brightness(1.04);
+  box-shadow:
+    inset 3px 0 0 var(--capsule-color),
+    0 0 22px color-mix(in srgb, var(--capsule-color) 28%, transparent);
+  pointer-events: none;
+  transition:
+    transform 210ms cubic-bezier(.2,.78,.2,1),
+    opacity 160ms ease,
+    filter 160ms ease,
+    box-shadow 160ms ease;
+}
+.cluster-capsule.drop-preview-removing {
+  z-index: 18;
+  transform: translate3d(18px, 0, 0) scale(.88);
+  opacity: .12;
+  filter: grayscale(.7) blur(.3px);
+  pointer-events: none;
+  transition:
+    transform 210ms cubic-bezier(.2,.78,.2,1),
+    opacity 180ms ease,
+    filter 180ms ease;
+}
 .cluster-capsule.selected {
   outline: 1px solid color-mix(in srgb, var(--capsule-color) 86%, white 14%);
   outline-offset: 1px;
