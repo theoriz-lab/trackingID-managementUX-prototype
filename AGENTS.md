@@ -39,11 +39,11 @@ Additional behavior:
 
 ## Interaction
 
-- The 3D scene is the primary operator surface. Cluster picking, selection, drag and left-slot assignment must remain synchronized with the ID store.
+- The 3D scene is the primary spatial operator surface for picking, selection and Manual movement. ID reassignment drag/drop must start only from cluster capsules in the left ID list or bottom tray; dragging a cluster in 3D must never assign it to an ID slot.
 - Selection has one model everywhere: plain click selects one visible slot/assigned cluster; Shift+click is additive/toggle selection. An assigned cluster selection must also select its numeric slot. Every selected representation uses bold + glow consistently in the ID list, cluster tray and 3D view.
 - **ID color is identity-of-output:** all assigned cluster visuals must derive their color from `src/id-colors.js`. Never derive operator colors from cluster UUID/source ID. Unassigned clusters are always neutral gray.
 - Enabled/Disabled, Solo, Manual and selection visual state must agree between the ID panel, cluster tray and 3D. Disabled remains gray even under Solo; Solo changes focus/opacity, not enabled color.
-- In the left list, the ID number, Solo button and Manual button are fixed controls. Only the cluster capsule moves between slot wells.
+- In the left list, the ID number, Solo button and Manual button are fixed controls. Only the cluster capsule moves between slot wells. While a capsule is dragged, its pointer label must always state the pending action with a question mark: assignment to an empty ID, Swap/Kick for an occupied ID, no change inside non-slot panel space, or removal when an assigned cluster is released outside the ID panel.
 - Clicking the ID number toggles Enabled. The adjacent `S` toggles Solo. Keep both usable by mouse and touch.
 - Cluster capsules in the left list and bottom tray must keep a lightweight **front-facing** point-cloud silhouette preview and live centroid coordinates. Derive the preview horizontal axis from cluster look-at/orientation; show only the upper framing edge/corners, not a full thumbnail box.
 - Operator-facing cluster names are stable alphabetical labels (A, B, C…) for the lifetime of the tracked cluster; do not expose source cluster numbers as the primary name.
@@ -69,4 +69,4 @@ Before considering a change ready:
 2. Run all Node tests, especially `tests/id-store.test.mjs`.
 3. Build/test the pinned SDK when SDK-facing behavior changes.
 4. Assemble the Pages artifact and verify it contains no runtime CDN dependency.
-5. Manually qualify mouse/touch 3D selection, plain/Shift multi-selection, 3D→ID drag, capsule→ID drag/reassignment, tray right-click, selected-only 3D right-click, Enabled/Solo/Manual controls, all bulk actions, Strict/Non-strict overflow, Min/Max range changes, delete/restore, locked identity disappearance/reappearance/unlock, Manual ground takeover + smooth return, ViewCube perspective/ortho behavior, mobile layout and reconnect behavior.
+5. Manually qualify mouse/touch 3D selection, plain/Shift multi-selection, capsule→ID drag/reassignment, drag-action labels and outside-panel removal, confirmation that 3D→ID assignment is disabled, tray right-click, selected-only 3D right-click, Enabled/Solo/Manual controls, all bulk actions, Strict/Non-strict overflow, Min/Max range changes, delete/restore, locked identity disappearance/reappearance/unlock, Manual ground takeover + smooth return, ViewCube perspective/ortho behavior, mobile layout and reconnect behavior.

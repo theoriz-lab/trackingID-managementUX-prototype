@@ -101,18 +101,10 @@
             <strong>ID options</strong>
             <span id="range-summary">IDs 1–12</span>
           </div>
-          <label class="settings-toggle">
-            <span>
-              <strong id="strict-mode-label">Non-strict mode</strong>
-              <small id="strict-mode-help">Overflow clusters wait for the next free ID</small>
-            </span>
-            <input id="strict-mode" type="checkbox">
-            <i aria-hidden="true"></i>
-          </label>
           <fieldset class="settings-choice" aria-labelledby="occupied-drop-mode-label">
             <legend>
-              <strong id="occupied-drop-mode-label">Occupied ID drop</strong>
-              <small>Choose what happens to the cluster already using the target ID</small>
+              <strong id="occupied-drop-mode-label">Occupied ID action · Kick / Swap</strong>
+              <small>Action used when a dragged cluster is dropped onto an occupied ID</small>
             </legend>
             <div class="settings-choice-options">
               <label>
@@ -125,6 +117,14 @@
               </label>
             </div>
           </fieldset>
+          <label class="settings-toggle">
+            <span>
+              <strong id="strict-mode-label">Non-strict mode</strong>
+              <small id="strict-mode-help">Overflow clusters wait for the next free ID</small>
+            </span>
+            <input id="strict-mode" type="checkbox">
+            <i aria-hidden="true"></i>
+          </label>
           <div class="settings-range">
             <label>
               <span>Min ID</span>
