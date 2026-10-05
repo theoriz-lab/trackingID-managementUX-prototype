@@ -49,7 +49,6 @@ const MANUAL_HITBOX_MIN_XZ_M = 0.38;
 const MANUAL_RETURN_DURATION_MS = 680;
 const MANUAL_PROXY_POINT_LIMIT = 180;
 const LOOK_AT_MARKER_OPACITY = 0.58;
-const LOOK_AT_MARKER_GHOST_OPACITY = 0.24;
 const SOLO_DIMMED_BOX_OPACITY = 0.035;
 const SOLO_DIMMED_POINT_OPACITY = 0.02;
 const SOLO_DIMMED_LABEL_OPACITY = 0.025;
@@ -1738,6 +1737,7 @@ export function createViewer(host) {
   renderer.domElement.addEventListener('pointerdown', (event) => {
     if (event.button === 2) {
       rightPointerGesture = {
+        pointerId: event.pointerId,
         x: event.clientX,
         y: event.clientY,
         moved: false
@@ -1757,7 +1757,10 @@ export function createViewer(host) {
   });
 
   renderer.domElement.addEventListener('pointermove', (event) => {
-    if (rightPointerGesture && (event.buttons & 2)) {
+    if (
+      rightPointerGesture?.pointerId === event.pointerId
+      && (event.buttons & 2)
+    ) {
       if (
         Math.hypot(
           event.clientX - rightPointerGesture.x,
@@ -1796,7 +1799,10 @@ export function createViewer(host) {
   }, { passive: false });
 
   renderer.domElement.addEventListener('pointerup', (event) => {
-    if (event.button === 2 && rightPointerGesture) {
+    if (
+      event.button === 2
+      && rightPointerGesture?.pointerId === event.pointerId
+    ) {
       if (rightPointerGesture.moved) {
         suppressContextMenuUntil = performance.now() + 300;
       }
@@ -1826,7 +1832,9 @@ export function createViewer(host) {
   });
 
   renderer.domElement.addEventListener('pointercancel', (event) => {
-    if (event.button === 2) rightPointerGesture = null;
+    if (rightPointerGesture?.pointerId === event.pointerId) {
+      rightPointerGesture = null;
+    }
     if (pickGesture?.dragging && pickGesture.target) {
       clusterDragHandler?.({
         phase: 'cancel',

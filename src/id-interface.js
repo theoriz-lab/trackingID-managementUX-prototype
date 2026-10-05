@@ -1,5 +1,10 @@
 import { idColorCss, UNASSIGNED_ID_COLOR_CSS } from './id-colors.js';
 import {
+  assignedSlotForCluster,
+  describeClusterDropAction,
+  resolveClusterDropPreview
+} from './id-drop-policy.js';
+import {
   deriveOperatorVisualState,
   deriveSelectionState,
   identityNameForCluster,
@@ -31,10 +36,6 @@ function escapeHtml(value) {
 
 function shortClusterName(cluster) {
   return operatorClusterName(cluster);
-}
-
-function assignedSlotForCluster(snapshot, key) {
-  return snapshot.slots.find((slot) => slot.clusterKey === key);
 }
 
 function reservedSlotForIdentity(snapshot, key) {
@@ -75,81 +76,6 @@ function previewMarkup(points) {
 
 function capsuleTitle(cluster) {
   return operatorClusterName(cluster);
-}
-
-export function describeClusterDropAction(
-  snapshot,
-  key,
-  targetId,
-  { insideIdPanel = false, sourceOrigin = 'id' } = {}
-) {
-  const sourceSlot = assignedSlotForCluster(snapshot, key);
-  const hasTargetId = targetId !== null
-    && targetId !== undefined
-    && Number.isInteger(Number(targetId));
-  const targetSlot = hasTargetId
-    ? snapshot.slots.find((slot) => slot.id === Number(targetId))
-    : null;
-
-  if (targetSlot) {
-    if (sourceSlot?.id === targetSlot.id) return `Keep ID ${targetSlot.id}?`;
-    if (targetSlot.clusterKey && targetSlot.clusterKey !== key) {
-      return snapshot.options.occupiedDropMode === 'swap'
-        ? `Swap with ID ${targetSlot.id}?`
-        : `Kick ID ${targetSlot.id}?`;
-    }
-    return `Assign to ID ${targetSlot.id}?`;
-  }
-
-  if (insideIdPanel) return 'No change?';
-  if (sourceOrigin === 'tray') return sourceSlot ? 'No change?' : 'Leave unassigned?';
-  if (sourceSlot) return `Remove from ID ${sourceSlot.id}?`;
-  return 'Leave unassigned?';
-}
-
-function isPreviewEligibleFreeSlot(slot) {
-  return Boolean(
-    slot?.visible
-      && slot.enabled
-      && !slot.manual
-      && !slot.clusterKey
-      && !slot.locked
-  );
-}
-
-export function resolveClusterDropPreview(snapshot, key, targetId) {
-  const sourceSlot = assignedSlotForCluster(snapshot, key);
-  const targetSlot = snapshot.slots.find((slot) => slot.id === Number(targetId));
-  if (!targetSlot || sourceSlot?.id === targetSlot.id) {
-    return { sourceId: sourceSlot?.id ?? null, targetId: targetSlot?.id ?? null, displacedTo: null, displaced: false };
-  }
-
-  const displaced = Boolean(targetSlot.clusterKey && targetSlot.clusterKey !== key);
-  if (!displaced) {
-    return { sourceId: sourceSlot?.id ?? null, targetId: targetSlot.id, displacedTo: null, displaced: false };
-  }
-
-  if (snapshot.options.occupiedDropMode === 'swap') {
-    return {
-      sourceId: sourceSlot?.id ?? null,
-      targetId: targetSlot.id,
-      displacedTo: sourceSlot?.id ?? null,
-      displaced: true
-    };
-  }
-
-  const excluded = new Set([targetSlot.id]);
-  if (sourceSlot) excluded.add(sourceSlot.id);
-  const destination = snapshot.slots.find(
-    (slot) => !excluded.has(slot.id) && isPreviewEligibleFreeSlot(slot)
-  );
-
-  return {
-    sourceId: sourceSlot?.id ?? null,
-    targetId: targetSlot.id,
-    displacedTo: destination?.id ?? null,
-    displaced: true
-  };
 }
 
 export function createIdInterface({ store }) {
@@ -932,30 +858,8 @@ export function createIdInterface({ store }) {
     }
   }
 
-  function assignDraggedCluster(
-    key,
-    targetId,
-    { floorPoint = null, preserveManual = true } = {}
-  ) {
-    const before = store.snapshot();
-    const sourceSlot = assignedSlotForCluster(before, key);
-    const cluster = before.clusters.find((candidate) => candidate.key === key);
-    const wasManual = Boolean(sourceSlot?.manual);
-    const manualPoint = floorPoint
-      ?? sourceSlot?.manualPosition
-      ?? (cluster ? [cluster.centroid[0], 0, cluster.centroid[2]] : null);
-
-    const result = store.assignClusterToId(key, targetId);
-    if (!result.ok) return false;
-
-    if (wasManual && sourceSlot?.id !== targetId) store.setManual(sourceSlot.id, false);
-    if (wasManual && preserveManual) {
-      store.setManual(targetId, true);
-      if (manualPoint) store.setManualPosition(targetId, manualPoint);
-    } else if (wasManual && sourceSlot?.id === targetId) {
-      store.setManual(targetId, false);
-    }
-    return true;
+  function assignDraggedCluster(key, targetId) {
+    return store.assignClusterToId(key, targetId).ok;
   }
 
   function handle3dClusterDrag(event) {
@@ -984,9 +888,10 @@ export function createIdInterface({ store }) {
       const cluster = snapshot.clusters.find((candidate) => candidate.key === key);
       const sourceSlot = assignedSlotForCluster(snapshot, key);
 
-      // Once Manual was explicitly enabled from the ID panel, the live tracked
-      // source remains read-only. The separate manual proxy is the draggable one.
-      if (sourceSlot?.manual) return;
+      // Direct 3D manipulation is a temporary Manual takeover and therefore
+      // requires an assigned ID. Unassigned live clusters stay pickable but
+      // are not draggable.
+      if (!sourceSlot || sourceSlot.manual) return;
 
       const floorPoint = event.floorPoint
         ?? (cluster ? [cluster.centroid[0], 0, cluster.centroid[2]] : null);

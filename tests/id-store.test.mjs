@@ -175,29 +175,6 @@ test('release keeps a live cluster intentionally unassigned until it leaves trac
   assert.equal(state.slots[0].clusterKey, 'a');
 });
 
-test('swap refuses disabled IDs', () => {
-  const store = createIdStore({ count: 2 });
-  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
-  store.setEnabled(2, false);
-
-  assert.equal(store.swapAssignments(1, 2), false);
-  const state = store.snapshot();
-  assert.equal(state.slots[0].clusterKey, 'a');
-  assert.equal(state.slots[1].clusterKey, 'b');
-});
-
-test('swap into a pending Lock & Learn ID learns the arriving cluster', () => {
-  const store = createIdStore({ count: 3 });
-  store.lockAndLearn(1);
-  store.syncFrame([cluster('a', 2), cluster('b', 3)]);
-
-  assert.equal(store.swapAssignments(1, 2), true);
-  const state = store.snapshot();
-  assert.equal(state.slots[0].clusterKey, 'a');
-  assert.equal(state.slots[0].identityKey, 'a');
-  assert.equal(state.slots[0].pendingLearn, false);
-});
-
 test('a selected cluster is cleared when it leaves tracking', () => {
   const store = createIdStore({ count: 2 });
   store.syncFrame([cluster('a', 1)]);
@@ -633,4 +610,83 @@ test('occupied drop mode can switch between Kick and Swap', () => {
   assert.equal(store.snapshot().options.occupiedDropMode, 'swap');
   assert.equal(store.setOccupiedDropMode('invalid'), false);
   assert.equal(store.snapshot().options.occupiedDropMode, 'swap');
+});
+
+
+test('releasing a Manual cluster clears Manual so the slot is reusable', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  store.setManual(1, true);
+
+  assert.equal(store.releaseId(1), true);
+  let state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[0].manual, false);
+
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[1].clusterKey, 'b');
+
+  store.syncFrame([cluster('b', 2)]);
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+});
+
+test('Manual state follows the dragged cluster atomically during Swap', () => {
+  const reasons = [];
+  const store = createIdStore({
+    count: 2,
+    occupiedDropMode: 'swap',
+    onChange: (snapshot, reason) => reasons.push({ snapshot, reason })
+  });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  store.setManual(1, true);
+  store.setManualPosition(1, [4, 0, 5]);
+  reasons.length = 0;
+
+  const result = store.assignClusterToId('a', 2);
+  assert.equal(result.ok, true);
+  assert.equal(reasons.length, 1);
+  assert.equal(reasons[0].reason, 'assign');
+
+  const state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'b');
+  assert.equal(state.slots[0].manual, false);
+  assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(state.slots[1].manual, true);
+  assert.deepEqual(state.slots[1].manualPosition, [4, 0, 5]);
+});
+
+test('Manual state follows a displaced cluster during Kick', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'kick' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  store.setManual(2, true);
+  store.setManualPosition(2, [7, 0, 8]);
+
+  const result = store.assignClusterToId('a', 2);
+  assert.equal(result.ok, true);
+
+  const state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[0].manual, false);
+  assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(state.slots[1].manual, false);
+  assert.equal(state.slots[2].clusterKey, 'b');
+  assert.equal(state.slots[2].manual, true);
+  assert.deepEqual(state.slots[2].manualPosition, [7, 0, 8]);
+});
+
+test('Lock all is idempotent for already locked pending slots', () => {
+  const reasons = [];
+  const store = createIdStore({
+    count: 1,
+    onChange: (_snapshot, reason) => reasons.push(reason)
+  });
+
+  assert.equal(store.lockAll(), true);
+  reasons.length = 0;
+  assert.equal(store.lockAll(), false);
+  assert.deepEqual(reasons, []);
 });

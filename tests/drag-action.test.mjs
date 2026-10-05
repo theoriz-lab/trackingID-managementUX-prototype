@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createIdStore } from '../src/id-store.js';
-import { describeClusterDropAction, resolveClusterDropPreview } from '../src/id-interface.js';
+import { describeClusterDropAction, resolveClusterDropPreview } from '../src/id-drop-policy.js';
 
 const cluster = (key, sourceId) => ({
   key,
