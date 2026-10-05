@@ -24,8 +24,9 @@ Additional behavior:
 - Default allocation uses the next eligible free enabled ID. Explicit operator drag/drop may assign to a visible disabled slot without enabling it.
 - A disabled, occupied, identity-reserved or manually reserved ID is not automatically eligible.
 - Explicit operator reassignment may override the normal allocator.
-- An occupied Identity-Locked ID is an explicit operator override; ReID must not steal it while that override cluster remains present.
-- Learning a different identity must not retain the previous identity's name.
+- Identity state belongs to the locked cluster, not to the slot. The cluster owns `identityLocked` + its identity name; a slot only owns an `identityKey` reservation while it is locked.
+- A locked cluster keeps its cached identity even while missing from live tracking. If it occupied a slot, that visible slot remains reserved for the identity and must reacquire it even when the slot is disabled.
+- Unlocking a reserved slot also unlocks that identity and removes its name. An unlocked live cluster immediately falls back to its alphabetical operator label.
 - Dropping a cluster on an occupied ID moves the displaced cluster to the next eligible free ID when possible.
 - Lock & Learn on an occupied ID learns that cluster; on an empty ID it waits for the next explicit assignment.
 - Lock active affects occupied IDs only so spare slots remain free.
@@ -41,12 +42,13 @@ Additional behavior:
 - The 3D scene is the primary operator surface. Cluster picking, selection, drag and left-slot assignment must remain synchronized with the ID store.
 - Selection has one model everywhere: plain click selects one visible slot/assigned cluster; Shift+click is additive/toggle selection. An assigned cluster selection must also select its numeric slot. Every selected representation uses bold + glow consistently in the ID list, cluster tray and 3D view.
 - **ID color is identity-of-output:** all assigned cluster visuals must derive their color from `src/id-colors.js`. Never derive operator colors from cluster UUID/source ID. Unassigned clusters are always neutral gray.
+- Enabled/Disabled, Solo, Manual and selection visual state must agree between the ID panel, cluster tray and 3D. Disabled remains gray even under Solo; Solo changes focus/opacity, not enabled color.
 - In the left list, the ID number, Solo button and Manual button are fixed controls. Only the cluster capsule moves between slot wells.
 - Clicking the ID number toggles Enabled. The adjacent `S` toggles Solo. Keep both usable by mouse and touch.
 - Cluster capsules in the left list and bottom tray must keep a lightweight **front-facing** point-cloud silhouette preview and live centroid coordinates. Derive the preview horizontal axis from cluster look-at/orientation; show only the upper framing edge/corners, not a full thumbnail box.
 - Operator-facing cluster names are stable alphabetical labels (A, B, C…) for the lifetime of the tracked cluster; do not expose source cluster numbers as the primary name.
-- Cluster Lock is available directly on every capsule. An unassigned cluster may carry a pending lock request; on explicit assignment the destination slot becomes locked/learned. Learned prototype identities receive one stable funny generated name unless the operator later edits it.
-- Normal 3D labels are bare numeric IDs. A matching learned identity is formatted exactly as `<ID> : <name>`.
+- Cluster Lock is available directly on every capsule. Lock immediately caches an identity on the cluster and gives it one stable generated name; that name replaces `Cluster A/B/…` in every cluster representation. When a locked cluster is assigned, its slot reservation follows the cluster. Missing locked identities remain in the cluster tray with an explicit Missing state.
+- Normal 3D labels are bare numeric IDs. A locked assigned identity is formatted exactly as `<ID> : <name>`; a locked unassigned live cluster may show the identity name alone. Never render an identity name after its cluster has been unlocked.
 - A normal live cluster bounding box, center centroid, floor donut and look-at decoration are **selection-only**. Hidden decoration must not become visible again merely because a global visibility flag changes.
 - Manual takeover is a floor-raycast interaction. The operator proxy is ID-colored, sparse-point only, and connected by a dashed line from its floor centroid to the live source centroid. The live source becomes gray and does not display a bounding box while takeover is active.
 - A direct left-drag from a live assigned cluster is **temporary Manual**: release/cancel must always clear Manual and return the proxy smoothly to automatic tracking. Manual enabled explicitly with the fixed M button is persistent; while it is active, only the separate Manual proxy is draggable and the live source is read-only.
@@ -55,6 +57,7 @@ Additional behavior:
 - Solo is the only operator override state persisted locally. Persist visible Solo slot IDs only; deleted slots must never be restored as Solo. Do not write persistence on live tracking frames.
 - A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display a reserved identity name on a temporary operator override.
 - Keep the ViewCube behavior in sync with the Augmenta ThreeJS example. On the canvas, left pointer drag is reserved for cluster/Manual interaction, right-button drag pans, middle-button drag orbits, wheel zoom remains available, and one-finger touch must not accidentally orbit the camera. Camera framing must account for the left ID panel so the spatial content is centered in the unobscured viewport.
+- Cluster context actions are available by right-click in the bottom cluster tray. On the 3D canvas they are available only for an already-selected cluster. A right-button camera pan must suppress the context menu.
 - Use Pointer Events for direct manipulation and preserve touch scrolling/long-hold behavior where the UI needs both scrolling and dragging.
 - Keep the left controls and bottom tray visually lightweight over the 3D stage; do not restore a permanent right-side inspector without an explicit product decision.
 
@@ -66,4 +69,4 @@ Before considering a change ready:
 2. Run all Node tests, especially `tests/id-store.test.mjs`.
 3. Build/test the pinned SDK when SDK-facing behavior changes.
 4. Assemble the Pages artifact and verify it contains no runtime CDN dependency.
-5. Manually qualify mouse/touch 3D selection, plain/Shift multi-selection, 3D→ID drag, capsule→ID drag/reassignment, Enabled/Solo/Manual controls, all bulk actions, Strict/Non-strict overflow, Min/Max range changes, delete/restore, Lock & Learn, Manual ground takeover + smooth return, ViewCube perspective/ortho behavior, mobile layout and reconnect behavior.
+5. Manually qualify mouse/touch 3D selection, plain/Shift multi-selection, 3D→ID drag, capsule→ID drag/reassignment, tray right-click, selected-only 3D right-click, Enabled/Solo/Manual controls, all bulk actions, Strict/Non-strict overflow, Min/Max range changes, delete/restore, locked identity disappearance/reappearance/unlock, Manual ground takeover + smooth return, ViewCube perspective/ortho behavior, mobile layout and reconnect behavior.
