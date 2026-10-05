@@ -59,7 +59,7 @@
         <div class="cluster-dock" aria-label="Live clusters">
           <div class="cluster-dock-header">
             <strong>Live Clusters <span id="live-count">(0)</span></strong>
-            <span>Right-click to assign to an ID</span>
+            
           </div>
           <div id="cluster-tray" class="cluster-tray">
             <div class="tray-empty">Waiting for live clusters…</div>
@@ -112,11 +112,11 @@
           <div class="settings-range">
             <label>
               <span>Min ID</span>
-              <input id="min-id" type="number" min="1" step="1" value="1" inputmode="numeric">
+              <input id="min-id" type="number" min="0" step="1" value="1" inputmode="numeric">
             </label>
             <label>
               <span>Max ID</span>
-              <input id="max-id" type="number" min="1" step="1" value="12" inputmode="numeric">
+              <input id="max-id" type="number" min="0" step="1" value="12" inputmode="numeric">
             </label>
           </div>
           <p class="settings-note">Changing the range removes slots outside Min/Max from this operator view.</p>
