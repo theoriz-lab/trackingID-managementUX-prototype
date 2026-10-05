@@ -635,6 +635,7 @@ export function createIdStore({
     const slot = getSlot(id);
     if (!slot?.visible) return false;
     const next = Boolean(enabled);
+    if (next && !slot.clusterKey) return false;
     if (slot.manual === next) return false;
     slot.manual = next;
     if (next) {
