@@ -90,3 +90,22 @@ export function resolveClusterDropPreview(snapshot, key, targetId) {
     displaced: true
   };
 }
+
+
+export function resolveClusterDropAssignments(snapshot, key, targetId) {
+  const sourceSlot = assignedSlotForCluster(snapshot, key);
+  const targetSlot = snapshot.slots.find((slot) => slot.id === Number(targetId));
+  if (!targetSlot) return new Map();
+
+  const assignments = new Map();
+  assignments.set(key, targetSlot.id);
+
+  if (sourceSlot?.id === targetSlot.id) return assignments;
+
+  const displacedKey = targetSlot.clusterKey;
+  if (!displacedKey || displacedKey === key) return assignments;
+
+  const preview = resolveClusterDropPreview(snapshot, key, targetSlot.id);
+  assignments.set(displacedKey, preview.displacedTo);
+  return assignments;
+}
