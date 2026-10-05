@@ -2,6 +2,7 @@ import { idColorCss, UNASSIGNED_ID_COLOR_CSS } from './id-colors.js';
 import {
   assignedSlotForCluster,
   describeClusterDropAction,
+  resolveClusterDropAssignments,
   resolveClusterDropPreview
 } from './id-drop-policy.js';
 import {
@@ -78,7 +79,7 @@ function capsuleTitle(cluster) {
   return operatorClusterName(cluster);
 }
 
-export function createIdInterface({ store }) {
+export function createIdInterface({ store, onDropPreview } = {}) {
   const idPanel = document.querySelector('.id-panel');
   const idList = document.querySelector('#id-list');
   const clusterTray = document.querySelector('#cluster-tray');
@@ -738,6 +739,7 @@ export function createIdInterface({ store }) {
   function clearDropPreview() {
     idList.querySelectorAll('.drop-preview-moving, .drop-preview-removing').forEach(clearPreviewElement);
     dropPreviewSignature = '';
+    onDropPreview?.(null);
   }
 
   function previewOffset(origin, destination) {
@@ -807,14 +809,23 @@ export function createIdInterface({ store }) {
     if (!target) {
       if (!insideIdPanel && dragState.sourceOrigin === 'id' && sourceCapsule) {
         desired.set(sourceCapsule, { kind: 'remove' });
+        onDropPreview?.(new Map([[dragState.key, null]]));
+      } else {
+        onDropPreview?.(null);
       }
-      reconcileDropPreview(desired);
+      onDropPreview?.(resolveClusterDropAssignments(snapshot, dragState.key, target.id));
+    reconcileDropPreview(desired);
       return;
     }
 
     const targetWell = slotWell(target.id);
     const sourceWell = slotWell(sourceSlot?.id);
     if (!targetWell || sourceSlot?.id === target.id) {
+      onDropPreview?.(
+        targetWell
+          ? resolveClusterDropAssignments(snapshot, dragState.key, target.id)
+          : null
+      );
       reconcileDropPreview(desired);
       return;
     }
