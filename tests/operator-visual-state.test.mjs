@@ -5,7 +5,8 @@ import {
   deriveSelectionState,
   identityNameForCluster,
   operatorClusterName,
-  operatorLabelForCluster
+  operatorLabelForCluster,
+  slotReservesClusterIdentity
 } from '../src/operator-visual-state.js';
 
 test('solo mode keeps every enabled solo slot as a focus target', () => {
@@ -59,6 +60,7 @@ test('matching identities render as ID colon name', () => {
   const slot = {
     id: 4,
     clusterKey: 'singer-a',
+    locked: true,
     identityKey: 'singer-a'
   };
   const cluster = {
@@ -68,8 +70,28 @@ test('matching identities render as ID colon name', () => {
     identityName: 'Singer A'
   };
 
+  assert.equal(slotReservesClusterIdentity(slot, cluster), true);
   assert.equal(operatorLabelForCluster(slot, cluster), '4 : Singer A');
   assert.equal(operatorClusterName(cluster), 'Singer A');
+});
+
+test('an unlocked slot never renders the cached identity name', () => {
+  const slot = {
+    id: 4,
+    clusterKey: 'singer-a',
+    locked: false,
+    identityKey: 'singer-a'
+  };
+  const cluster = {
+    key: 'singer-a',
+    label: 'A',
+    identityLocked: true,
+    identityName: 'Pancake'
+  };
+
+  assert.equal(slotReservesClusterIdentity(slot, cluster), false);
+  assert.equal(operatorLabelForCluster(slot, cluster), '4');
+  assert.equal(operatorClusterName(cluster), 'Pancake');
 });
 
 test('unlocking identity state falls back to the alphabetical cluster name', () => {
