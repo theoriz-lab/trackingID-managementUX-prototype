@@ -24,10 +24,7 @@ function escapeHtml(value) {
 }
 
 function shortClusterName(cluster) {
-  if (!cluster) return 'Cluster';
-  if (cluster.sourceId !== null && cluster.sourceId !== undefined) return `Cluster ${cluster.sourceId}`;
-  if (cluster.uuid) return `Cluster ${cluster.uuid.slice(0, 6)}`;
-  return 'Cluster';
+  return cluster?.label ? `Cluster ${cluster.label}` : 'Cluster';
 }
 
 function assignedSlotForCluster(snapshot, key) {
@@ -82,20 +79,19 @@ export function createIdInterface({ store }) {
   const connectionNote = document.querySelector('#connection-note');
   const sceneLabel = document.querySelector('#scene-label');
 
-  const contextMenu = document.createElement('div');
-  contextMenu.className = 'cluster-context-menu';
-  contextMenu.hidden = true;
-  document.body.appendChild(contextMenu);
-
   let dragState = null;
   let sceneDrag = null;
   let activeDropTarget = null;
   let suppressClickUntil = 0;
-  let contextClusterKey = null;
 
   function clusterCapsuleMarkup(cluster, slot, { tray = false, selected = false } = {}) {
     const color = slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
     const manual = Boolean(slot?.manual);
+    const clusterLocked = Boolean(
+      cluster?.lockRequested
+      || slot?.locked
+      || (slot?.identityKey && slot.identityKey === cluster?.key)
+    );
     const classes = [
       'cluster-capsule',
       slot ? 'assigned' : 'unassigned',
@@ -111,12 +107,12 @@ export function createIdInterface({ store }) {
         data-drag-type="cluster"
         data-drag-key="${escapeHtml(cluster.key)}"
         data-live-cluster-key="${escapeHtml(cluster.key)}"
-        ${tray ? `data-context-cluster-key="${escapeHtml(cluster.key)}"` : ''}
         role="button"
         tabindex="0"
         aria-label="${escapeHtml(capsuleTitle(cluster, slot))}"
       >
         <svg class="capsule-preview" viewBox="0 0 100 100" aria-hidden="true">
+          <path class="capsule-preview-frame" d="M12 34 V12 H88 V34"></path>
           ${previewCircles(cluster.preview)}
         </svg>
         <span class="capsule-copy">
@@ -124,6 +120,16 @@ export function createIdInterface({ store }) {
           <small class="capsule-coords">${escapeHtml(coordinateText(cluster))}</small>
           <em class="capsule-assignment">${slot ? `ID ${slot.id}` : 'Unassigned'}</em>
         </span>
+        <button
+          class="cluster-lock-button${clusterLocked ? ' active' : ''}"
+          type="button"
+          data-action="toggle-cluster-lock"
+          data-cluster-key="${escapeHtml(cluster.key)}"
+          data-no-drag
+          title="${clusterLocked ? 'Unlock cluster identity' : 'Lock cluster identity'}"
+          aria-pressed="${clusterLocked}"
+          aria-label="${clusterLocked ? 'Unlock' : 'Lock'} ${escapeHtml(shortClusterName(cluster))}"
+        ><span class="lock-symbol ${clusterLocked ? 'closed' : 'open'}" aria-hidden="true"></span></button>
       </div>`;
   }
 
@@ -256,7 +262,6 @@ export function createIdInterface({ store }) {
     warningButton.textContent = warnings.length === 1 ? '1 warning' : `${warnings.length} warnings`;
     warningButton.dataset.firstWarningId = warnings[0]?.slot.id ?? '';
 
-    if (!contextMenu.hidden && contextClusterKey) renderContextMenu(contextClusterKey);
   }
 
   function updateTracking(items) {
@@ -345,6 +350,7 @@ export function createIdInterface({ store }) {
       case 'toggle-enabled': store.setEnabled(id, !slot?.enabled); break;
       case 'toggle-solo': store.setSolo(id, !slot?.solo); break;
       case 'toggle-lock': slot?.locked ? store.unlock(id) : store.lockAndLearn(id); break;
+      case 'toggle-cluster-lock': store.toggleClusterLock(key); break;
       case 'toggle-manual': store.setManual(id, !slot?.manual); break;
       case 'delete-slot': store.deleteSlot(id); break;
       case 'restore-slots': store.restoreDeletedSlots(); break;
@@ -366,7 +372,6 @@ export function createIdInterface({ store }) {
   }
 
   document.addEventListener('click', (event) => {
-    if (!contextMenu.hidden && !event.target.closest?.('.cluster-context-menu')) closeContextMenu();
     if (
       !settingsMenu.hidden
       && !event.target.closest?.('#id-settings-menu')
@@ -395,7 +400,6 @@ export function createIdInterface({ store }) {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-      closeContextMenu();
       setSettingsOpen(false);
       store.clearSelection();
       return;
@@ -419,77 +423,6 @@ export function createIdInterface({ store }) {
       store.setManual(selectedSlot.id, !selectedSlot.manual);
     }
   });
-
-  document.addEventListener('contextmenu', (event) => {
-    const capsule = event.target.closest?.('.cluster-tray [data-context-cluster-key]');
-    if (!capsule) return;
-    event.preventDefault();
-    openContextMenu(capsule.dataset.contextClusterKey, event.clientX, event.clientY);
-  });
-
-  contextMenu.addEventListener('click', (event) => {
-    const button = event.target.closest?.('[data-context-action]');
-    if (!button || !contextClusterKey) return;
-    const snapshot = store.snapshot();
-    const currentSlot = assignedSlotForCluster(snapshot, contextClusterKey);
-    const action = button.dataset.contextAction;
-
-    if (action === 'assign') {
-      store.assignClusterToId(contextClusterKey, Number(button.dataset.id));
-      closeContextMenu();
-      return;
-    }
-    if (action === 'unassign' && currentSlot) {
-      store.releaseId(currentSlot.id);
-      closeContextMenu();
-      return;
-    }
-    if (action === 'name' && currentSlot) {
-      const name = window.prompt('Identity name', currentSlot.identityName || '');
-      if (name !== null) store.setIdentityName(currentSlot.id, name);
-      closeContextMenu();
-    }
-  });
-
-  function openContextMenu(key, x, y) {
-    contextClusterKey = key;
-    renderContextMenu(key);
-    contextMenu.hidden = false;
-    const rect = contextMenu.getBoundingClientRect();
-    contextMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - rect.width - 8, x))}px`;
-    contextMenu.style.top = `${Math.max(8, Math.min(window.innerHeight - rect.height - 8, y))}px`;
-  }
-
-  function renderContextMenu(key) {
-    const snapshot = store.snapshot();
-    const cluster = snapshot.clusters.find((candidate) => candidate.key === key);
-    const currentSlot = assignedSlotForCluster(snapshot, key);
-    contextMenu.innerHTML = `
-      <header>${escapeHtml(shortClusterName(cluster))} · assign to ID</header>
-      <div class="context-id-grid">
-        ${snapshot.slots.filter((slot) => slot.visible).map((slot) => `
-          <button
-            type="button"
-            class="context-id"
-            style="--id-color:${idColorCss(slot.id)}"
-            data-context-action="assign"
-            data-id="${slot.id}"
-            ${slot.enabled ? '' : 'disabled'}
-          >${slot.id}${currentSlot?.id === slot.id ? ' ·' : ''}</button>
-        `).join('')}
-      </div>
-      <div class="context-menu-separator"></div>
-      ${currentSlot ? `
-        <button type="button" class="context-secondary" data-context-action="name">Identity name…</button>
-        <button type="button" class="context-secondary" data-context-action="unassign">Unassign from ID ${currentSlot.id}</button>
-      ` : ''}
-    `;
-  }
-
-  function closeContextMenu() {
-    contextMenu.hidden = true;
-    contextClusterKey = null;
-  }
 
   document.addEventListener('pointerdown', (event) => {
     if (event.target.closest?.('[data-no-drag]')) return;
