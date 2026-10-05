@@ -2,7 +2,8 @@ import { idColorCss, UNASSIGNED_ID_COLOR_CSS } from './id-colors.js';
 import {
   deriveOperatorVisualState,
   deriveSelectionState,
-  identityNameForCluster
+  identityNameForCluster,
+  operatorClusterName
 } from './operator-visual-state.js';
 
 const DRAG_START_DISTANCE_PX = 7;
@@ -28,11 +29,21 @@ function escapeHtml(value) {
 }
 
 function shortClusterName(cluster) {
-  return cluster?.label ? `Cluster ${cluster.label}` : 'Cluster';
+  return operatorClusterName(cluster);
 }
 
 function assignedSlotForCluster(snapshot, key) {
   return snapshot.slots.find((slot) => slot.clusterKey === key);
+}
+
+function reservedSlotForIdentity(snapshot, key) {
+  return snapshot.slots.find(
+    (slot) => slot.visible && slot.locked && slot.identityKey === key
+  );
+}
+
+function displaySlotForCluster(snapshot, key) {
+  return assignedSlotForCluster(snapshot, key) ?? reservedSlotForIdentity(snapshot, key);
 }
 
 function identityWarning(slot) {
@@ -43,6 +54,7 @@ function identityWarning(slot) {
 }
 
 function coordinateText(cluster) {
+  if (!cluster?.visible && cluster?.identityLocked) return 'Missing · identity cached';
   const [x = 0, y = 0, z = 0] = cluster?.centroid ?? [];
   return `x ${Number(x).toFixed(2)}  y ${Number(y).toFixed(2)}  z ${Number(z).toFixed(2)}`;
 }
@@ -57,7 +69,7 @@ function previewCircles(points) {
 }
 
 function capsuleTitle(cluster) {
-  return shortClusterName(cluster);
+  return operatorClusterName(cluster);
 }
 
 export function createIdInterface({ store }) {
@@ -83,6 +95,12 @@ export function createIdInterface({ store }) {
   const connectionNote = document.querySelector('#connection-note');
   const sceneLabel = document.querySelector('#scene-label');
 
+  const contextMenu = document.createElement('div');
+  contextMenu.className = 'cluster-context-menu';
+  contextMenu.hidden = true;
+  document.body.appendChild(contextMenu);
+
+  let contextClusterKey = null;
   let dragState = null;
   let sceneDrag = null;
   let activeDropTarget = null;
@@ -90,17 +108,32 @@ export function createIdInterface({ store }) {
 
   function clusterCapsuleMarkup(cluster, slot, { selected = false } = {}) {
     const disabled = Boolean(slot && !slot.enabled);
+    const missing = Boolean(!cluster?.visible && cluster?.identityLocked);
     const color = slot && slot.enabled ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
-    const manual = Boolean(slot?.manual);
-    const identityName = identityNameForCluster(slot, cluster?.key);
-    const clusterLocked = Boolean(cluster?.lockRequested || slot?.locked);
+    const manual = Boolean(slot?.manual && cluster?.visible);
+    const identityName = identityNameForCluster(cluster);
+    const clusterLocked = Boolean(cluster?.identityLocked);
     const classes = [
       'cluster-capsule',
       slot ? 'assigned' : 'unassigned',
       disabled ? 'disabled' : '',
+      missing ? 'missing' : '',
+      clusterLocked ? 'identity-locked' : '',
       manual ? 'manual' : '',
       selected ? 'selected' : ''
     ].filter(Boolean).join(' ');
+    const dragAttributes = cluster?.visible
+      ? `data-drag-type="cluster" data-drag-key="${escapeHtml(cluster.key)}"`
+      : '';
+    const assignment = slot
+      ? missing
+        ? `ID ${slot.id} · reserved`
+        : clusterLocked
+          ? `ID ${slot.id} · locked`
+          : `ID ${slot.id}`
+      : clusterLocked
+        ? 'Identity locked · unassigned'
+        : 'Unassigned';
 
     return `
       <div
@@ -108,8 +141,7 @@ export function createIdInterface({ store }) {
         style="--capsule-color:${color}"
         data-action="select-cluster"
         data-cluster-key="${escapeHtml(cluster.key)}"
-        data-drag-type="cluster"
-        data-drag-key="${escapeHtml(cluster.key)}"
+        ${dragAttributes}
         data-live-cluster-key="${escapeHtml(cluster.key)}"
         role="button"
         tabindex="0"
@@ -122,9 +154,7 @@ export function createIdInterface({ store }) {
         <span class="capsule-copy">
           <strong>${escapeHtml(capsuleTitle(cluster))}${manual ? ' · Manual' : ''}</strong>
           <small class="capsule-coords">${escapeHtml(coordinateText(cluster))}</small>
-          <em class="capsule-assignment">${slot
-            ? `ID ${slot.id}${identityName ? ` · ${escapeHtml(identityName)}` : ''}`
-            : cluster?.lockRequested ? 'Unassigned · lock pending' : 'Unassigned'}</em>
+          <em class="capsule-assignment">${escapeHtml(assignment)}</em>
         </span>
         <button
           class="cluster-lock-button${clusterLocked ? ' active' : ''}"
@@ -132,9 +162,9 @@ export function createIdInterface({ store }) {
           data-action="toggle-cluster-lock"
           data-cluster-key="${escapeHtml(cluster.key)}"
           data-no-drag
-          title="${clusterLocked ? 'Unlock cluster identity' : 'Lock cluster identity'}"
+          title="${clusterLocked ? 'Unlock identity' : 'Lock identity'}"
           aria-pressed="${clusterLocked}"
-          aria-label="${clusterLocked ? 'Unlock' : 'Lock'} ${escapeHtml(shortClusterName(cluster))}"
+          aria-label="${clusterLocked ? 'Unlock' : 'Lock'} ${escapeHtml(identityName || shortClusterName(cluster))}"
         ><span class="lock-symbol ${clusterLocked ? 'closed' : 'open'}" aria-hidden="true"></span></button>
       </div>`;
   }
@@ -142,9 +172,13 @@ export function createIdInterface({ store }) {
   function render() {
     const snapshot = store.snapshot();
     const clusterByKey = new Map(snapshot.clusters.map((cluster) => [cluster.key, cluster]));
-    const visibleClusters = snapshot.clusters
-      .filter((cluster) => cluster.visible)
-      .sort((a, b) => (a.sourceId ?? Number.MAX_SAFE_INTEGER) - (b.sourceId ?? Number.MAX_SAFE_INTEGER));
+    const panelClusters = snapshot.clusters
+      .filter((cluster) => cluster.visible || cluster.identityLocked)
+      .sort((a, b) => {
+        if (a.visible !== b.visible) return a.visible ? -1 : 1;
+        return String(a.label ?? '').localeCompare(String(b.label ?? ''));
+      });
+    const visibleClusterCount = snapshot.clusters.filter((cluster) => cluster.visible).length;
 
     const operatorSlots = snapshot.slots.filter((slot) => slot.visible);
     const visualState = deriveOperatorVisualState(operatorSlots);
@@ -162,7 +196,9 @@ export function createIdInterface({ store }) {
     clusterTray.classList.toggle('has-selection', selectedClusterKeys.size > 0);
 
     idList.innerHTML = operatorSlots.map((slot) => {
-      const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
+      const liveCluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
+      const cluster = liveCluster
+        ?? (slot.identityKey ? clusterByKey.get(slot.identityKey) : null);
       const selected = selectedSlotIds.has(slot.id);
       const warning = identityWarning(slot);
       const rowClasses = [
@@ -224,7 +260,7 @@ export function createIdInterface({ store }) {
             data-no-drag
             title="${slot.manual ? 'Return smoothly to live tracking' : 'Start manual takeover'}"
             aria-pressed="${slot.manual}"
-            ${cluster ? '' : 'disabled'}
+            ${liveCluster ? '' : 'disabled'}
           >M</button>
           ${snapshot.options.allowDelete ? `
             <button
@@ -239,16 +275,16 @@ export function createIdInterface({ store }) {
         </article>`;
     }).join('');
 
-    clusterTray.innerHTML = visibleClusters.length
-      ? visibleClusters.map((cluster) => {
-          const slot = assignedSlotForCluster(snapshot, cluster.key);
+    clusterTray.innerHTML = panelClusters.length
+      ? panelClusters.map((cluster) => {
+          const slot = displaySlotForCluster(snapshot, cluster.key);
           const selected = selectedClusterKeys.has(cluster.key);
           const solo = visualState.soloClusterKeys.has(cluster.key);
           return `<div class="${solo ? 'is-solo' : visualState.soloMode ? 'is-solo-muted' : ''}">${clusterCapsuleMarkup(cluster, slot, { selected })}</div>`;
         }).join('')
       : '<div class="tray-empty">Waiting for live clusters…</div>';
 
-    liveCount.textContent = `(${visibleClusters.length})`;
+    liveCount.textContent = `(${visibleClusterCount})`;
     slotCount.textContent = String(operatorSlots.length);
     activeSlotCount.textContent = String(operatorSlots.filter((slot) => slot.enabled).length);
 
@@ -276,6 +312,7 @@ export function createIdInterface({ store }) {
     warningButton.textContent = warnings.length === 1 ? '1 warning' : `${warnings.length} warnings`;
     warningButton.dataset.firstWarningId = warnings[0]?.slot.id ?? '';
 
+    if (!contextMenu.hidden && contextClusterKey) renderContextMenu(contextClusterKey);
   }
 
   function updateTracking(items) {
@@ -386,6 +423,7 @@ export function createIdInterface({ store }) {
   }
 
   document.addEventListener('click', (event) => {
+    if (!contextMenu.hidden && !event.target.closest?.('.cluster-context-menu')) closeContextMenu();
     if (
       !settingsMenu.hidden
       && !event.target.closest?.('#id-settings-menu')
@@ -414,6 +452,7 @@ export function createIdInterface({ store }) {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      closeContextMenu();
       setSettingsOpen(false);
       store.clearSelection();
       return;
@@ -437,6 +476,119 @@ export function createIdInterface({ store }) {
       store.setManual(selectedSlot.id, !selectedSlot.manual);
     }
   });
+
+  document.addEventListener('contextmenu', (event) => {
+    const capsule = event.target.closest?.('#cluster-tray .cluster-capsule[data-cluster-key]');
+    if (!capsule) return;
+    event.preventDefault();
+    openClusterContextMenu(
+      capsule.dataset.clusterKey,
+      event.clientX,
+      event.clientY
+    );
+  });
+
+  contextMenu.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-context-action]');
+    if (!button || !contextClusterKey) return;
+
+    const snapshot = store.snapshot();
+    const cluster = snapshot.clusters.find((candidate) => candidate.key === contextClusterKey);
+    const currentSlot = assignedSlotForCluster(snapshot, contextClusterKey);
+    const action = button.dataset.contextAction;
+
+    if (action === 'assign' && cluster?.visible) {
+      store.assignClusterToId(contextClusterKey, Number(button.dataset.id));
+      closeContextMenu();
+      return;
+    }
+    if (action === 'unassign' && currentSlot) {
+      store.releaseId(currentSlot.id);
+      closeContextMenu();
+      return;
+    }
+    if (action === 'toggle-lock') {
+      store.toggleClusterLock(contextClusterKey);
+      closeContextMenu();
+      return;
+    }
+    if (action === 'rename' && cluster?.identityLocked) {
+      const name = window.prompt('Identity name', cluster.identityName || '');
+      if (name !== null) store.setClusterIdentityName(contextClusterKey, name);
+      closeContextMenu();
+    }
+  });
+
+  function openClusterContextMenu(key, x, y, { requireSelected = false } = {}) {
+    const snapshot = store.snapshot();
+    const cluster = snapshot.clusters.find((candidate) => candidate.key === key);
+    if (!cluster || (!cluster.visible && !cluster.identityLocked)) return false;
+
+    if (requireSelected) {
+      const selection = deriveSelectionState(
+        snapshot.slots.filter((slot) => slot.visible),
+        snapshot.selected,
+        snapshot.selectedSlotIds
+      );
+      if (!selection.clusterKeys.has(key)) return false;
+    }
+
+    contextClusterKey = key;
+    renderContextMenu(key);
+    contextMenu.hidden = false;
+    const rect = contextMenu.getBoundingClientRect();
+    contextMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - rect.width - 8, x))}px`;
+    contextMenu.style.top = `${Math.max(8, Math.min(window.innerHeight - rect.height - 8, y))}px`;
+    return true;
+  }
+
+  function renderContextMenu(key) {
+    const snapshot = store.snapshot();
+    const cluster = snapshot.clusters.find((candidate) => candidate.key === key);
+    if (!cluster) {
+      closeContextMenu();
+      return;
+    }
+
+    const currentSlot = assignedSlotForCluster(snapshot, key);
+    const reservedSlot = reservedSlotForIdentity(snapshot, key);
+    const displaySlot = currentSlot ?? reservedSlot;
+    const canAssign = Boolean(cluster.visible);
+
+    contextMenu.innerHTML = `
+      <header>${escapeHtml(capsuleTitle(cluster))}</header>
+      <div class="context-status">${cluster.visible
+        ? displaySlot ? `Current ID ${displaySlot.id}` : 'Live · unassigned'
+        : displaySlot ? `Missing · ID ${displaySlot.id} reserved` : 'Missing · identity cached'}</div>
+      <div class="context-id-grid">
+        ${snapshot.slots.filter((slot) => slot.visible).map((slot) => `
+          <button
+            type="button"
+            class="context-id${slot.enabled ? '' : ' disabled'}${displaySlot?.id === slot.id ? ' current' : ''}"
+            style="--id-color:${slot.enabled ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS}"
+            data-context-action="assign"
+            data-id="${slot.id}"
+            ${canAssign ? '' : 'disabled'}
+          >${slot.id}</button>
+        `).join('')}
+      </div>
+      <div class="context-menu-separator"></div>
+      <button type="button" class="context-secondary" data-context-action="toggle-lock">
+        ${cluster.identityLocked ? 'Unlock identity' : 'Lock identity'}
+      </button>
+      ${cluster.identityLocked ? `
+        <button type="button" class="context-secondary" data-context-action="rename">Rename identity…</button>
+      ` : ''}
+      ${currentSlot ? `
+        <button type="button" class="context-secondary" data-context-action="unassign">Unassign from ID ${currentSlot.id}</button>
+      ` : ''}
+    `;
+  }
+
+  function closeContextMenu() {
+    contextMenu.hidden = true;
+    contextClusterKey = null;
+  }
 
   document.addEventListener('pointerdown', (event) => {
     if (event.target.closest?.('[data-no-drag]')) return;
@@ -693,6 +845,7 @@ export function createIdInterface({ store }) {
     updateTracking,
     setConnectionState,
     setScene,
-    handle3dClusterDrag
+    handle3dClusterDrag,
+    openClusterContextMenu
   };
 }
