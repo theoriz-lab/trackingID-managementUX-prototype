@@ -18,6 +18,7 @@ const ID_PALETTE = Object.freeze([
 ]);
 
 export function idColorValue(id) {
+  if (id === null || id === undefined || id === '') return UNASSIGNED_ID_COLOR_VALUE;
   const numericId = Number(id);
   if (!Number.isInteger(numericId) || numericId < 0) return UNASSIGNED_ID_COLOR_VALUE;
   if (numericId === 0) return ID_ZERO_COLOR;
