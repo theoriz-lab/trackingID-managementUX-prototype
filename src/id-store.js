@@ -22,14 +22,6 @@ function clusterLetter(index) {
   return label;
 }
 
-function nameSeed(value) {
-  let hash = 2166136261;
-  for (const char of String(value ?? '')) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
 
 function makeSlot(id) {
   return {
@@ -159,7 +151,7 @@ export function createIdStore({
         .filter((candidate) => candidate !== slot && candidate.identityName)
         .map((candidate) => candidate.identityName)
     );
-    const start = nameSeed(clusterKey) % FUNNY_IDENTITY_NAMES.length;
+    const start = Math.floor(Math.random() * FUNNY_IDENTITY_NAMES.length);
     for (let offset = 0; offset < FUNNY_IDENTITY_NAMES.length; offset += 1) {
       const candidate = FUNNY_IDENTITY_NAMES[(start + offset) % FUNNY_IDENTITY_NAMES.length];
       if (!used.has(candidate)) return candidate;
