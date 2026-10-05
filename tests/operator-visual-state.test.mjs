@@ -47,11 +47,11 @@ test('identity names do not follow a temporary operator override', () => {
   };
 
   assert.equal(identityNameForCluster(slot, 'bob'), '');
-  assert.equal(operatorLabelForCluster(slot, 'bob'), 'ID 1');
+  assert.equal(operatorLabelForCluster(slot, 'bob'), '1');
   assert.equal(identityNameForCluster(slot, 'alice'), 'Alice');
 });
 
-test('matching identities render above their public ID', () => {
+test('matching identities render as ID colon name', () => {
   const slot = {
     id: 4,
     clusterKey: 'singer-a',
@@ -59,7 +59,7 @@ test('matching identities render above their public ID', () => {
     identityName: 'Singer A'
   };
 
-  assert.equal(operatorLabelForCluster(slot, 'singer-a'), 'Singer A\nID 4');
+  assert.equal(operatorLabelForCluster(slot, 'singer-a'), '4 : Singer A');
 });
 
 
