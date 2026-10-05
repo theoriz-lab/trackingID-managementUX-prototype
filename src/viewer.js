@@ -40,6 +40,8 @@ const VIEW_DIRECTIONS = Object.freeze({
 });
 const UNASSIGNED_COLOR = new THREE.Color(UNASSIGNED_ID_COLOR_VALUE);
 const PICK_MAX_MOVEMENT_PX = 7;
+const SELECTED_GLOW_OPACITY = 0.42;
+const MANUAL_HITBOX_MIN_XZ_M = 0.38;
 const MANUAL_RETURN_DURATION_MS = 680;
 const MANUAL_PROXY_POINT_LIMIT = 180;
 const LOOK_AT_MARKER_OPACITY = 0.58;
@@ -107,6 +109,7 @@ export function createViewer(host) {
   const unitBox = new THREE.BoxGeometry(1, 1, 1);
   const unitBoxEdges = new THREE.EdgesGeometry(unitBox);
   const unitHitBox = unitBox.clone();
+  const selectedGlowTexture = makeGlowTexture();
   unitBox.dispose();
   // Integrate the look-at cue into the lower forward edge: a straight edge
   // with a centered outward triangle (___/\\___). The apex is intentionally
@@ -135,6 +138,7 @@ export function createViewer(host) {
   const interactionStartDirection = new THREE.Vector3();
   let homeOrthoHalfWidth = DEFAULT_ORTHO_HALF_WIDTH;
   let orthoHalfWidth = DEFAULT_ORTHO_HALF_WIDTH;
+  let leftInset = 0;
   let rightInset = 0;
   let insetAnimationFrame;
   let cameraTransitionFrame;
@@ -636,20 +640,22 @@ export function createViewer(host) {
   function projectionMetrics() {
     const width = Math.max(host.clientWidth, 1);
     const height = Math.max(host.clientHeight, 1);
-    const hasInset = rightInset > 0 && width > rightInset + MIN_VIEWPORT_AFTER_INSET_PX;
-    const virtualWidth = hasInset ? width + rightInset : width;
+    const horizontalInset = leftInset + rightInset;
+    const hasInset = horizontalInset > 0 && width > horizontalInset + MIN_VIEWPORT_AFTER_INSET_PX;
+    const virtualWidth = hasInset ? width + horizontalInset : width;
 
     return {
       width,
       height,
       hasInset,
       virtualWidth,
+      viewOffsetX: hasInset ? rightInset : 0,
       aspect: Math.max(virtualWidth / height, MIN_PROJECTION_ASPECT)
     };
   }
 
   function updateCameraProjection() {
-    const { width, height, hasInset, virtualWidth, aspect } = projectionMetrics();
+    const { width, height, hasInset, virtualWidth, viewOffsetX, aspect } = projectionMetrics();
 
     camera.clearViewOffset();
     if (camera.isPerspectiveCamera) {
@@ -664,7 +670,7 @@ export function createViewer(host) {
     camera.updateProjectionMatrix();
 
     if (hasInset) {
-      camera.setViewOffset(virtualWidth, height, rightInset, 0, width, height);
+      camera.setViewOffset(virtualWidth, height, viewOffsetX, 0, width, height);
     }
   }
 
@@ -683,6 +689,32 @@ export function createViewer(host) {
     renderer.setSize(width, height, false);
     updateLineMaterialResolution(width, height);
     updateCameraProjection();
+  }
+
+  function setLeftInset(value, animate = false) {
+    const target = Math.max(0, Number(value) || 0);
+    if (insetAnimationFrame) cancelAnimationFrame(insetAnimationFrame);
+
+    if (!animate) {
+      leftInset = target;
+      updateCameraProjection();
+      return;
+    }
+
+    const start = leftInset;
+    const startedAt = performance.now();
+    const duration = PANEL_INSET_ANIMATION_DURATION_MS;
+
+    const tick = (now) => {
+      const t = Math.min((now - startedAt) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      leftInset = start + (target - start) * eased;
+      updateCameraProjection();
+      if (t < 1) insetAnimationFrame = requestAnimationFrame(tick);
+      else insetAnimationFrame = undefined;
+    };
+
+    insetAnimationFrame = requestAnimationFrame(tick);
   }
 
   function setRightInset(value, animate = false) {
@@ -794,6 +826,20 @@ export function createViewer(host) {
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0 })
     );
 
+    const glow = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: selectedGlowTexture,
+        color,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      })
+    );
+    glow.visible = false;
+    glow.renderOrder = 8;
+
     const groundDonut = new THREE.Mesh(
       groundDonutGeometry,
       new THREE.MeshBasicMaterial({
@@ -833,7 +879,7 @@ export function createViewer(host) {
     const label = createLabelSprite(id === undefined ? '' : String(id), color);
     label.visible = id !== undefined;
 
-    clusterGroup.add(box, centroid, groundDonut);
+    clusterGroup.add(box, centroid, glow, groundDonut);
     vectorGroup.add(velocity);
     pointGroup.add(points);
     labelGroup.add(label);
@@ -844,6 +890,7 @@ export function createViewer(host) {
       hitbox,
       lookAtMarker,
       centroid,
+      glow,
       groundDonut,
       velocity,
       points,
@@ -901,6 +948,9 @@ export function createViewer(host) {
     updateLookAtMarker(view, cluster.getLookAt());
 
     view.centroid.position.fromArray(centroid);
+    view.glow.position.fromArray(centroid);
+    const glowSize = Math.max(Math.abs(size[0]), Math.abs(size[1]), Math.abs(size[2]), 0.6) * 1.35;
+    view.glow.scale.set(glowSize, glowSize, 1);
     view.groundDonut.position.set(centroid[0], FLOOR_Y + 0.012, centroid[2]);
 
     updateVelocity(view.velocity, center, velocity, view.color, velocityDirection);
@@ -933,6 +983,7 @@ export function createViewer(host) {
     view.box.material.color.copy(color);
     view.lookAtMarker.material.color.copy(color);
     view.centroid.material.color.copy(color);
+    view.glow.material.color.copy(color);
     view.groundDonut.material.color.copy(color);
     view.velocity.setColor(color);
     view.points.material.color.copy(color);
@@ -945,6 +996,8 @@ export function createViewer(host) {
     view.centroid.material.opacity = selectedLive
       ? soloDimmed ? SOLO_DIMMED_CENTROID_OPACITY : ghostFactor
       : 0;
+    view.glow.visible = selectedLive && !soloDimmed;
+    view.glow.material.opacity = view.glow.visible ? SELECTED_GLOW_OPACITY * ghostFactor : 0;
     view.groundDonut.visible = selectedLive;
     view.groundDonut.material.opacity = selectedLive
       ? soloDimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.9 * ghostFactor
@@ -960,6 +1013,7 @@ export function createViewer(host) {
     view.points.material.opacity = soloDimmed
       ? SOLO_DIMMED_POINT_OPACITY
       : view.manualSource ? 0.38 : selected ? 1 : 0.72 * ghostFactor;
+    view.points.material.size = selectedLive ? 0.042 : 0.03;
     view.label.material.opacity = soloDimmed
       ? SOLO_DIMMED_LABEL_OPACITY
       : view.manualSource ? 0.44 : 0.92 * ghostFactor;
@@ -1025,6 +1079,7 @@ export function createViewer(host) {
   function hideCluster(view) {
     view.box.visible = false;
     view.centroid.visible = false;
+    view.glow.visible = false;
     view.groundDonut.visible = false;
     view.velocity.visible = false;
     view.points.frustumCulled = false;
@@ -1052,6 +1107,48 @@ export function createViewer(host) {
       .map((view) => view.hitbox);
     const hit = raycaster.intersectObjects(hitboxes, false)[0];
     return hit?.object?.userData?.clusterKey ?? null;
+  }
+
+  function pickSceneTargetAt(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (
+      clientX < rect.left || clientX > rect.right
+      || clientY < rect.top || clientY > rect.bottom
+      || rect.width <= 0 || rect.height <= 0
+    ) {
+      return null;
+    }
+
+    pickPointer.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1
+    );
+    scene.updateMatrixWorld(true);
+    raycaster.setFromCamera(pickPointer, camera);
+
+    const manualHit = raycaster.intersectObjects(
+      [...manualViews.values()]
+        .filter((view) => !view.returning)
+        .map((view) => view.hitbox),
+      false
+    )[0];
+    if (manualHit) {
+      return {
+        kind: 'manual',
+        id: manualHit.object.userData.manualId,
+        key: manualHit.object.userData.clusterKey ?? null
+      };
+    }
+
+    const liveHit = raycaster.intersectObjects(
+      [...views.values()]
+        .filter((view) => view.clusterState !== null)
+        .map((view) => view.hitbox),
+      false
+    )[0];
+    return liveHit
+      ? { kind: 'cluster', id: null, key: liveHit.object.userData.clusterKey ?? null }
+      : null;
   }
 
   function setClusterSelectionHandler(handler) {
@@ -1132,13 +1229,18 @@ export function createViewer(host) {
         view.returnFrame = undefined;
       }
       view.clusterKey = slot.clusterKey;
+      view.hitbox.userData.clusterKey = slot.clusterKey;
       view.color.setHex(idColorValue(slot.id));
       setManualViewColor(view, view.color);
       const source = slot.clusterKey ? views.get(slot.clusterKey) : null;
       updateManualSilhouette(view, source);
       view.group.position.set(slot.manualPosition[0], FLOOR_Y + 0.016, slot.manualPosition[2]);
       view.label.position.set(0, manualProxyHeight(view) + 0.16, 0);
-      applyManualSoloStyle(view, soloMode && !soloSlotIds.has(slot.id));
+      applyManualSoloStyle(
+        view,
+        soloMode && !soloSlotIds.has(slot.id),
+        Boolean(slot.clusterKey && slot.clusterKey === selectedClusterKey)
+      );
       updateManualLink(view);
     }
 
@@ -1186,6 +1288,31 @@ export function createViewer(host) {
     centroid.position.y = 0.035;
     centroid.renderOrder = 10;
 
+    const glow = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: selectedGlowTexture,
+        color,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      })
+    );
+    glow.visible = false;
+    glow.renderOrder = 8;
+
+    const hitbox = new THREE.Mesh(
+      unitHitBox,
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        colorWrite: false
+      })
+    );
+    hitbox.userData.manualId = id;
+
     const donut = new THREE.Mesh(
       groundDonutGeometry,
       new THREE.MeshBasicMaterial({
@@ -1215,7 +1342,7 @@ export function createViewer(host) {
 
     const label = createLabelSprite(`ID ${id} · Manual`, color);
     label.renderOrder = 11;
-    group.add(points, centroid, donut, label);
+    group.add(points, centroid, glow, hitbox, donut, label);
     manualGroup.add(group, link);
 
     return {
@@ -1224,6 +1351,8 @@ export function createViewer(host) {
       group,
       points,
       centroid,
+      glow,
+      hitbox,
       donut,
       link,
       label,
@@ -1237,6 +1366,7 @@ export function createViewer(host) {
   function setManualViewColor(view, color) {
     view.points.material.color.copy(color);
     view.centroid.material.color.copy(color);
+    view.glow.material.color.copy(color);
     view.donut.material.color.copy(color);
     view.link.material.color.copy(color);
     if (view.label.userData.colorHex !== color.getHex()) {
@@ -1255,6 +1385,10 @@ export function createViewer(host) {
     if (!sourcePosition || !sourceCentroid || sourcePosition.count <= 0) {
       view.points.visible = false;
       view.proxyHeight = 1.6;
+      view.hitbox.position.set(0, 0.8, 0);
+      view.hitbox.scale.set(MANUAL_HITBOX_MIN_XZ_M, 1.6, MANUAL_HITBOX_MIN_XZ_M);
+      view.glow.position.set(0, 0.8, 0);
+      view.glow.scale.set(1.8, 1.8, 1);
       return;
     }
 
@@ -1283,13 +1417,24 @@ export function createViewer(host) {
     view.points.geometry.computeBoundingSphere();
     view.points.visible = values.length > 0;
     view.proxyHeight = Number.isFinite(maxY - minY) ? maxY - minY : 1.6;
+
+    const width = Math.max(source?.box?.scale?.x ?? 0, MANUAL_HITBOX_MIN_XZ_M);
+    const depth = Math.max(source?.box?.scale?.z ?? 0, MANUAL_HITBOX_MIN_XZ_M);
+    const height = manualProxyHeight(view);
+    view.hitbox.position.set(0, height * 0.5, 0);
+    view.hitbox.scale.set(width, height, depth);
+    view.glow.position.set(0, height * 0.5, 0);
+    const glowSize = Math.max(width, depth, height, 0.6) * 1.35;
+    view.glow.scale.set(glowSize, glowSize, 1);
   }
 
-  function applyManualSoloStyle(view, dimmed) {
+  function applyManualSoloStyle(view, dimmed, selected) {
     const opacity = dimmed ? SOLO_DIMMED_POINT_OPACITY : 0.95;
     view.points.material.opacity = opacity;
     view.centroid.material.opacity = dimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.95;
     view.donut.material.opacity = dimmed ? SOLO_DIMMED_CENTROID_OPACITY : 0.95;
+    view.glow.visible = selected && !dimmed;
+    view.glow.material.opacity = view.glow.visible ? SELECTED_GLOW_OPACITY : 0;
     view.link.material.opacity = dimmed ? SOLO_DIMMED_VECTOR_OPACITY : 0.68;
     view.label.material.opacity = dimmed ? SOLO_DIMMED_LABEL_OPACITY : 1;
   }
@@ -1349,6 +1494,8 @@ export function createViewer(host) {
     view.points.geometry.dispose();
     view.points.material.dispose();
     view.centroid.material.dispose();
+    view.glow.material.dispose();
+    view.hitbox.material.dispose();
     view.donut.material.dispose();
     view.link.geometry.dispose();
     view.link.material.dispose();
@@ -1516,7 +1663,7 @@ export function createViewer(host) {
   }
 
   function disposeView(view) {
-    clusterGroup.remove(view.box, view.centroid, view.groundDonut);
+    clusterGroup.remove(view.box, view.centroid, view.glow, view.groundDonut);
     vectorGroup.remove(view.velocity);
     pointGroup.remove(view.points);
     labelGroup.remove(view.label);
@@ -1525,6 +1672,7 @@ export function createViewer(host) {
     view.hitbox.material.dispose();
     view.lookAtMarker.material.dispose();
     view.centroid.material.dispose();
+    view.glow.material.dispose();
     view.groundDonut.material.dispose();
     view.points.geometry.dispose();
     view.points.material.dispose();
@@ -1539,25 +1687,27 @@ export function createViewer(host) {
 
   renderer.domElement.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
-    const key = pickClusterAt(event.clientX, event.clientY);
+    const target = pickSceneTargetAt(event.clientX, event.clientY);
     pickGesture = {
       pointerId: event.pointerId,
-      key,
+      target,
       x: event.clientX,
       y: event.clientY,
       dragging: false
     };
-    if (key) renderer.domElement.setPointerCapture?.(event.pointerId);
+    if (target) renderer.domElement.setPointerCapture?.(event.pointerId);
   });
 
   renderer.domElement.addEventListener('pointermove', (event) => {
-    if (!pickGesture || pickGesture.pointerId !== event.pointerId || !pickGesture.key) return;
+    if (!pickGesture || pickGesture.pointerId !== event.pointerId || !pickGesture.target) return;
     const distance = Math.hypot(event.clientX - pickGesture.x, event.clientY - pickGesture.y);
     if (!pickGesture.dragging && distance >= PICK_MAX_MOVEMENT_PX) {
       pickGesture.dragging = true;
       clusterDragHandler?.({
         phase: 'start',
-        key: pickGesture.key,
+        kind: pickGesture.target.kind,
+        id: pickGesture.target.id,
+        key: pickGesture.target.key,
         clientX: event.clientX,
         clientY: event.clientY,
         floorPoint: raycastFloor(event.clientX, event.clientY)
@@ -1567,7 +1717,9 @@ export function createViewer(host) {
     event.preventDefault();
     clusterDragHandler?.({
       phase: 'move',
-      key: pickGesture.key,
+      kind: pickGesture.target.kind,
+      id: pickGesture.target.id,
+      key: pickGesture.target.key,
       clientX: event.clientX,
       clientY: event.clientY,
       floorPoint: raycastFloor(event.clientX, event.clientY)
@@ -1584,21 +1736,25 @@ export function createViewer(host) {
     if (gesture.dragging) {
       clusterDragHandler?.({
         phase: 'end',
-        key: gesture.key,
+        kind: gesture.target.kind,
+        id: gesture.target.id,
+        key: gesture.target.key,
         clientX: event.clientX,
         clientY: event.clientY,
         floorPoint: raycastFloor(event.clientX, event.clientY)
       });
       return;
     }
-    if (gesture.key) clusterSelectionHandler?.(gesture.key);
+    clusterSelectionHandler?.(gesture.target?.key ?? null);
   });
 
   renderer.domElement.addEventListener('pointercancel', (event) => {
-    if (pickGesture?.dragging && pickGesture.key) {
+    if (pickGesture?.dragging && pickGesture.target) {
       clusterDragHandler?.({
         phase: 'cancel',
-        key: pickGesture.key,
+        kind: pickGesture.target.kind,
+        id: pickGesture.target.id,
+        key: pickGesture.target.key,
         clientX: event.clientX,
         clientY: event.clientY,
         floorPoint: raycastFloor(event.clientX, event.clientY)
@@ -1633,6 +1789,7 @@ export function createViewer(host) {
     returnToPerspective,
     leaveOrthographicFromCurrentView,
     setOrthographicView,
+    setLeftInset,
     setRightInset,
     setViewStateChangeHandler,
     setVisibility,
@@ -1691,8 +1848,8 @@ function setLeftHandedQuaternion(target, [x, y, z, w]) {
 
 function configureControls(controls) {
   controls.enableDamping = true;
-  controls.enableRotate = false;
-  controls.enablePan = false;
+  controls.enableRotate = true;
+  controls.enablePan = true;
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;
   controls.rotateSpeed = 0.6;
@@ -1705,9 +1862,13 @@ function configureControls(controls) {
   controls.zoomToCursor = false;
   controls.minPolarAngle = PERSPECTIVE_MIN_POLAR_ANGLE;
   controls.maxPolarAngle = PERSPECTIVE_MAX_POLAR_ANGLE;
-  controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-  controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+  // Left drag belongs to cluster/manual interaction. Keep camera navigation
+  // on the mouse buttons that do not conflict with operator picking.
+  controls.mouseButtons.LEFT = -1;
+  controls.mouseButtons.MIDDLE = THREE.MOUSE.ROTATE;
   controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+  controls.touches.ONE = -1;
+  controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
 }
 
 function configureArrow(arrow) {
@@ -1776,6 +1937,28 @@ function replaceLabelTexture(sprite, text, color) {
 
 function updateLabelScale(sprite, text) {
   sprite.scale.set(1.0, String(text).includes('\n') ? 0.36 : 0.31, 1);
+}
+
+function makeGlowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+
+  const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.86)');
+  gradient.addColorStop(0.28, 'rgba(255,255,255,0.42)');
+  gradient.addColorStop(0.68, 'rgba(255,255,255,0.11)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 128, 128);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
 }
 
 function makeLabelTexture(text, color) {
