@@ -331,8 +331,9 @@ export function createIdStore({
     }
 
     if (selected?.type === 'cluster' && !getCluster(selected.key)?.visible) {
-      selected = null;
-      selectedSlotIds.clear();
+      const missingSlot = slotForCluster(selected.key);
+      if (missingSlot) selectedSlotIds.delete(missingSlot.id);
+      fallbackPrimarySelection();
       changed = true;
     }
 
