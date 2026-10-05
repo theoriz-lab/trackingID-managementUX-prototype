@@ -168,6 +168,9 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   top: 61px;
   right: 10px;
   width: min(318px, calc(100% - 20px));
+  max-height: calc(100% - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 11px;
   border: 1px solid rgba(142, 183, 234, .30);
   border-radius: 12px;
@@ -236,10 +239,12 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   box-shadow: 0 0 9px rgba(34,211,238,.52);
 }
 .settings-choice {
-  margin: 2px 2px 7px;
-  padding: 8px 0 2px;
+  min-inline-size: 0;
+  margin: 4px 2px 7px;
+  padding: 9px 0 4px;
   border: 0;
-  border-top: 1px solid rgba(205,224,255,.07);
+  border-top: 1px solid rgba(205,224,255,.10);
+  border-bottom: 1px solid rgba(205,224,255,.07);
 }
 .settings-choice legend {
   width: 100%;
@@ -1170,14 +1175,33 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   z-index: 9999;
   top: 0;
   left: 0;
-  max-width: 230px;
-  padding: 7px 10px;
+  min-width: 132px;
+  max-width: 250px;
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px 8px;
   border: 1px solid color-mix(in srgb, var(--capsule-color) 68%, transparent);
   border-radius: 9px;
-  background: rgba(8,13,22,.90);
+  background: rgba(8,13,22,.94);
   color: #eef5ff;
   box-shadow: 0 12px 30px rgba(0,0,0,.35);
   pointer-events: none;
+}
+.drag-ghost-cluster {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--capsule-color) 74%, white 26%);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drag-ghost-action {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 body.dragging-cluster, body.dragging-cluster * { cursor: grabbing !important; }
 
