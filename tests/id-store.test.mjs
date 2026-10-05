@@ -359,18 +359,24 @@ test('operator can assign a cluster to a visible disabled slot', () => {
 });
 
 test('unassigned cluster lock request follows the cluster into its assigned slot', () => {
-  const store = createIdStore({ count: 2 });
-  store.syncFrame([cluster('a', 3)]);
-  assert.equal(store.toggleClusterLock('a'), true);
-  let state = store.snapshot();
-  assert.equal(state.clusters.find((item) => item.key === 'a').lockRequested, true);
+  const store = createIdStore({ count: 1 });
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
 
-  store.assignClusterToId('a', 2);
+  let state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'occupied');
+  assert.equal(state.slots.some((slot) => slot.clusterKey === 'waiting'), false);
+
+  assert.equal(store.toggleClusterLock('waiting'), true);
   state = store.snapshot();
-  assert.equal(state.slots[1].locked, true);
-  assert.equal(state.slots[1].identityKey, 'a');
-  assert.notEqual(state.slots[1].identityName, '');
-  assert.equal(state.clusters.find((item) => item.key === 'a').lockRequested, false);
+  assert.equal(state.clusters.find((item) => item.key === 'waiting').lockRequested, true);
+
+  store.assignClusterToId('waiting', 1);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'waiting');
+  assert.equal(state.slots[0].locked, true);
+  assert.equal(state.slots[0].identityKey, 'waiting');
+  assert.notEqual(state.slots[0].identityName, '');
+  assert.equal(state.clusters.find((item) => item.key === 'waiting').lockRequested, false);
 });
 
 test('clusters receive stable alphabetical operator labels', () => {
