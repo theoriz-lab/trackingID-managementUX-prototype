@@ -97,3 +97,44 @@ test('Kick preview removes the displaced cluster when there is no other free ID'
     displaced: true
   });
 });
+
+
+test('Kick preview recomputes from real state when hovering consecutive occupied targets', () => {
+  const store = createIdStore({ count: 4, occupiedDropMode: 'kick' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('c', 3)]);
+
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 2), {
+    sourceId: 1,
+    targetId: 2,
+    displacedTo: 4,
+    displaced: true
+  });
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 3), {
+    sourceId: 1,
+    targetId: 3,
+    displacedTo: 4,
+    displaced: true
+  });
+});
+
+test('Swap preview recomputes each consecutive target without mutating state', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('c', 3)]);
+
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 2), {
+    sourceId: 1,
+    targetId: 2,
+    displacedTo: 1,
+    displaced: true
+  });
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 3), {
+    sourceId: 1,
+    targetId: 3,
+    displacedTo: 1,
+    displaced: true
+  });
+  const state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+  assert.equal(state.slots[1].clusterKey, 'b');
+  assert.equal(state.slots[2].clusterKey, 'c');
+});
