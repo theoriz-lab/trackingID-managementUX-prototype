@@ -146,7 +146,8 @@ test('Swap preview recomputes each consecutive target without mutating state', (
 
 test('Swap mode contextually falls back to Kick for an unassigned incoming cluster', () => {
   const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
-  store.syncFrame([cluster('occupied', 1), cluster('waiting', 9)]);
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
+  store.releaseId(2);
   const state = store.snapshot();
 
   assert.equal(
