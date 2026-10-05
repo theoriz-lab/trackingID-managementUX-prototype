@@ -10,6 +10,8 @@ import { readConnectionOptionsFromUrl } from './share-link.js';
 import { createViewer } from './viewer.js';
 
 const DISCONNECT_CLEANUP_DELAY_MS = 500;
+const SIDE_PANEL_GAP_PX = 18;
+const SIDE_PANEL_MAX_WIDTH_RATIO = 0.62;
 
 const DEFAULT_CONNECTION = Object.freeze({
   address: '127.0.0.1',
@@ -18,7 +20,9 @@ const DEFAULT_CONNECTION = Object.freeze({
   downsample: '1'
 });
 
-const viewer = createViewer(document.querySelector('#canvas-host'));
+const canvasHost = document.querySelector('#canvas-host');
+const idPanel = document.querySelector('.id-panel');
+const viewer = createViewer(canvasHost);
 viewer.setVisibility({
   clusters: true,
   points: true,
@@ -37,9 +41,30 @@ const idStore = createIdStore({
 });
 idInterface = createIdInterface({ store: idStore });
 
-viewer.setClusterSelectionHandler((key) => idStore.selectCluster(key));
+viewer.setClusterSelectionHandler((key) => {
+  if (key) idStore.selectCluster(key);
+  else idStore.clearSelection();
+});
 viewer.setClusterDragHandler((event) => idInterface.handle3dClusterDrag(event));
 viewer.setOperatorState(idStore.snapshot());
+
+function syncCameraPanelInset() {
+  const canvasRect = canvasHost.getBoundingClientRect();
+  const panelRect = idPanel.getBoundingClientRect();
+  const isSidePanel = panelRect.width <= canvasRect.width * SIDE_PANEL_MAX_WIDTH_RATIO
+    && panelRect.height >= canvasRect.height * 0.45
+    && panelRect.left <= canvasRect.left + SIDE_PANEL_GAP_PX * 2;
+
+  const leftInset = isSidePanel
+    ? Math.max(0, panelRect.right - canvasRect.left + SIDE_PANEL_GAP_PX)
+    : 0;
+  viewer.setLeftInset(leftInset);
+}
+
+const layoutObserver = new ResizeObserver(syncCameraPanelInset);
+layoutObserver.observe(canvasHost);
+layoutObserver.observe(idPanel);
+requestAnimationFrame(syncCameraPanelInset);
 
 createViewCube(document.querySelector('#view-cube'), viewer);
 
