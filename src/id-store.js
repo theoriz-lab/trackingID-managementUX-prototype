@@ -32,7 +32,6 @@ function makeSlot(id) {
     locked: false,
     pendingLearn: false,
     identityKey: null,
-    identityName: '',
     manual: false,
     solo: false,
     manualPosition: [0, 0, 0]
@@ -170,34 +169,99 @@ export function createIdStore({
     return isAutoEligible(slot) ? slot : null;
   }
 
-  function funnyIdentityName(clusterKey, slot) {
+  function funnyIdentityName(clusterKey) {
     const used = new Set(
-      slots
-        .filter((candidate) => candidate !== slot && candidate.identityName)
-        .map((candidate) => candidate.identityName)
+      [...clusters.values()]
+        .filter((cluster) => cluster.identityLocked && cluster.identityName)
+        .map((cluster) => cluster.identityName)
     );
     const start = Math.floor(Math.random() * FUNNY_IDENTITY_NAMES.length);
     for (let offset = 0; offset < FUNNY_IDENTITY_NAMES.length; offset += 1) {
       const candidate = FUNNY_IDENTITY_NAMES[(start + offset) % FUNNY_IDENTITY_NAMES.length];
       if (!used.has(candidate)) return candidate;
     }
-    return `Buddy ${slot.id}`;
+    return `Buddy ${clusterLetter(nextClusterOrdinal)}`;
   }
 
-  function setLearnedIdentity(slot, clusterKey) {
-    if (!clusterKey) return false;
-    const changed = slot.identityKey !== clusterKey;
-    if (changed && slot.identityKey) slot.identityName = '';
-    slot.identityKey = clusterKey;
+  function clearSlotReservation(slot, { unlockIdentity = false } = {}) {
+    if (!slot) return false;
+    const identityKey = slot.identityKey;
+    const changed = Boolean(slot.locked || slot.pendingLearn || identityKey);
+    slot.locked = false;
     slot.pendingLearn = false;
-    if (!slot.identityName) slot.identityName = funnyIdentityName(clusterKey, slot);
+    slot.identityKey = null;
+
+    if (unlockIdentity && identityKey) {
+      const cluster = getCluster(identityKey);
+      if (cluster) {
+        cluster.identityLocked = false;
+        cluster.identityName = '';
+        if (!cluster.visible && selected?.type === 'cluster' && selected.key === cluster.key) {
+          selected = null;
+          selectedSlotIds.delete(slot.id);
+        }
+      }
+    }
+    return changed;
+  }
+
+  function lockClusterIdentity(clusterKey) {
+    const cluster = getCluster(clusterKey);
+    if (!cluster) return false;
+    cluster.identityLocked = true;
+    if (!cluster.identityName) cluster.identityName = funnyIdentityName(clusterKey);
+    return true;
+  }
+
+  function reserveClusterIdentity(slot, clusterKey) {
+    const cluster = getCluster(clusterKey);
+    if (!slot || !cluster) return false;
+
+    for (const candidate of slots) {
+      if (candidate === slot || candidate.identityKey !== clusterKey) continue;
+      clearSlotReservation(candidate);
+    }
+
+    if (slot.identityKey && slot.identityKey !== clusterKey) {
+      clearSlotReservation(slot);
+    }
+
+    lockClusterIdentity(clusterKey);
+    slot.locked = true;
+    slot.pendingLearn = false;
+    slot.identityKey = clusterKey;
+    return true;
+  }
+
+  function unlockClusterIdentity(clusterKey) {
+    const cluster = getCluster(clusterKey);
+    if (!cluster) return false;
+    let changed = Boolean(cluster.identityLocked || cluster.identityName);
+
+    cluster.identityLocked = false;
+    cluster.identityName = '';
+
+    for (const slot of slots) {
+      if (slot.identityKey !== clusterKey) continue;
+      changed = clearSlotReservation(slot) || changed;
+    }
+
+    if (!cluster.visible && selected?.type === 'cluster' && selected.key === clusterKey) {
+      selected = null;
+      fallbackPrimarySelection();
+      changed = true;
+    }
+
+    if (!cluster.visible && !slots.some((slot) => slot.clusterKey === clusterKey || slot.identityKey === clusterKey)) {
+      clusters.delete(clusterKey);
+    }
     return changed;
   }
 
   function learnIdentityIfNeeded(slot, clusterKey) {
-    if (!slot.locked || !clusterKey) return false;
+    if (!slot?.locked || !clusterKey) return false;
     if (slot.identityKey && !slot.pendingLearn) return false;
-    return setLearnedIdentity(slot, clusterKey);
+    return reserveClusterIdentity(slot, clusterKey);
   }
 
   function assignClusterInternal(clusterKey, targetSlot, { operator = false } = {}) {
@@ -213,28 +277,38 @@ export function createIdStore({
 
     const sourceSlot = slotForCluster(clusterKey);
     if (sourceSlot?.id === targetSlot.id) {
-      learnIdentityIfNeeded(targetSlot, clusterKey);
+      if (cluster.identityLocked) reserveClusterIdentity(targetSlot, clusterKey);
+      else learnIdentityIfNeeded(targetSlot, clusterKey);
       return { ok: true, moved: false };
     }
 
     const displacedKey = targetSlot.clusterKey;
-    if (sourceSlot) sourceSlot.clusterKey = null;
-    targetSlot.clusterKey = clusterKey;
-    if (cluster.lockRequested) {
-      targetSlot.locked = true;
-      targetSlot.pendingLearn = false;
-      setLearnedIdentity(targetSlot, clusterKey);
-      cluster.lockRequested = false;
-    } else {
-      learnIdentityIfNeeded(targetSlot, clusterKey);
+    const displacedCluster = displacedKey ? getCluster(displacedKey) : null;
+
+    if (sourceSlot) {
+      sourceSlot.clusterKey = null;
+      if (sourceSlot.identityKey === clusterKey) clearSlotReservation(sourceSlot);
     }
+
+    if (
+      displacedKey
+      && targetSlot.identityKey === displacedKey
+      && displacedCluster?.identityLocked
+    ) {
+      clearSlotReservation(targetSlot);
+    }
+
+    targetSlot.clusterKey = clusterKey;
+    if (cluster.identityLocked) reserveClusterIdentity(targetSlot, clusterKey);
+    else learnIdentityIfNeeded(targetSlot, clusterKey);
 
     let displacedTo = null;
     if (displacedKey && displacedKey !== clusterKey) {
       const free = nextFreeSlot(new Set([targetSlot.id]));
       if (free) {
         free.clusterKey = displacedKey;
-        learnIdentityIfNeeded(free, displacedKey);
+        if (displacedCluster?.identityLocked) reserveClusterIdentity(free, displacedKey);
+        else learnIdentityIfNeeded(free, displacedKey);
         displacedTo = free.id;
       }
     }
@@ -296,7 +370,8 @@ export function createIdStore({
       const next = {
         key,
         label: previous?.label ?? clusterLetter(nextClusterOrdinal++),
-        lockRequested: Boolean(previous?.lockRequested),
+        identityLocked: Boolean(previous?.identityLocked),
+        identityName: previous?.identityName ?? '',
         uuid: item.uuid ? String(item.uuid) : '',
         sourceId: item.sourceId !== null
           && item.sourceId !== undefined
@@ -330,11 +405,14 @@ export function createIdStore({
       changed = true;
     }
 
-    if (selected?.type === 'cluster' && !getCluster(selected.key)?.visible) {
-      const missingSlot = slotForCluster(selected.key);
-      if (missingSlot) selectedSlotIds.delete(missingSlot.id);
-      fallbackPrimarySelection();
-      changed = true;
+    if (selected?.type === 'cluster') {
+      const selectedCluster = getCluster(selected.key);
+      if (selectedCluster && !selectedCluster.visible && !selectedCluster.identityLocked) {
+        const missingSlot = slotForCluster(selected.key) ?? slotForIdentity(selected.key);
+        if (missingSlot) selectedSlotIds.delete(missingSlot.id);
+        fallbackPrimarySelection();
+        changed = true;
+      }
     }
 
     for (const slot of slots) {
@@ -347,7 +425,12 @@ export function createIdStore({
 
     for (const [key, cluster] of clusters) {
       const referenced = slots.some((slot) => slot.clusterKey === key || slot.identityKey === key);
-      if (!cluster.visible && !referenced && now - cluster.lastSeen > CLUSTER_RETENTION_MS) {
+      if (
+        !cluster.visible
+        && !cluster.identityLocked
+        && !referenced
+        && now - cluster.lastSeen > CLUSTER_RETENTION_MS
+      ) {
         clusters.delete(key);
       }
     }
@@ -514,47 +597,46 @@ export function createIdStore({
   function lockAndLearn(id) {
     const slot = getSlot(id);
     if (!slot?.visible) return false;
+
     slot.locked = true;
     if (slot.clusterKey) {
-      setLearnedIdentity(slot, slot.clusterKey);
+      reserveClusterIdentity(slot, slot.clusterKey);
     } else if (!slot.identityKey) {
       slot.pendingLearn = true;
     }
+
     publish('lock');
     return true;
   }
 
   function unlock(id) {
     const slot = getSlot(id);
-    if (!slot?.visible || (!slot.locked && !slot.pendingLearn)) return false;
-    slot.locked = false;
-    slot.pendingLearn = false;
-    publish('unlock');
-    return true;
+    if (!slot?.visible || (!slot.locked && !slot.pendingLearn && !slot.identityKey)) return false;
+    const changed = clearSlotReservation(slot, { unlockIdentity: true });
+    if (changed) {
+      assignWaitingClusters();
+      publish('unlock');
+    }
+    return changed;
   }
 
   function toggleClusterLock(clusterKey) {
     const key = String(clusterKey ?? '');
     const cluster = getCluster(key);
-    if (!cluster?.visible) return false;
+    if (!cluster || (!cluster.visible && !cluster.identityLocked)) return false;
 
+    if (cluster.identityLocked) {
+      const changed = unlockClusterIdentity(key);
+      if (changed) {
+        assignWaitingClusters();
+        publish('cluster-unlock');
+      }
+      return changed;
+    }
+
+    lockClusterIdentity(key);
     const assignedSlot = slotForCluster(key);
-    const reservedSlot = slots.find(
-      (slot) => slot.visible && slot.locked && slot.identityKey === key
-    );
-    const lockedSlot = assignedSlot?.locked ? assignedSlot : reservedSlot;
-
-    if (lockedSlot) {
-      cluster.lockRequested = false;
-      return unlock(lockedSlot.id);
-    }
-
-    if (assignedSlot) {
-      cluster.lockRequested = false;
-      return lockAndLearn(assignedSlot.id);
-    }
-
-    cluster.lockRequested = !cluster.lockRequested;
+    if (assignedSlot) reserveClusterIdentity(assignedSlot, key);
     publish('cluster-lock');
     return true;
   }
@@ -563,8 +645,7 @@ export function createIdStore({
     let changed = false;
     for (const slot of visibleSlots()) {
       if (!slot.enabled || !slot.clusterKey) continue;
-      slot.locked = true;
-      setLearnedIdentity(slot, slot.clusterKey);
+      reserveClusterIdentity(slot, slot.clusterKey);
       changed = true;
     }
     if (changed) publish('lock-all-active');
@@ -577,7 +658,7 @@ export function createIdStore({
       if (slot.locked && !slot.pendingLearn) continue;
       slot.locked = true;
       if (slot.clusterKey) {
-        setLearnedIdentity(slot, slot.clusterKey);
+        reserveClusterIdentity(slot, slot.clusterKey);
       } else if (!slot.identityKey) {
         slot.pendingLearn = true;
       }
@@ -589,36 +670,41 @@ export function createIdStore({
 
   function unlockAll() {
     let changed = false;
-    for (const slot of visibleSlots()) {
-      if (!slot.locked && !slot.pendingLearn) continue;
-      slot.locked = false;
-      slot.pendingLearn = false;
+
+    for (const cluster of clusters.values()) {
+      if (!cluster.identityLocked) continue;
+      cluster.identityLocked = false;
+      cluster.identityName = '';
       changed = true;
     }
-    if (changed) publish('unlock-all');
+
+    for (const slot of visibleSlots()) {
+      if (!slot.locked && !slot.pendingLearn && !slot.identityKey) continue;
+      clearSlotReservation(slot);
+      changed = true;
+    }
+
+    for (const [key, cluster] of [...clusters]) {
+      if (!cluster.visible && !cluster.identityLocked && !slots.some((slot) => slot.clusterKey === key || slot.identityKey === key)) {
+        clusters.delete(key);
+      }
+    }
+
+    if (changed) {
+      assignWaitingClusters();
+      publish('unlock-all');
+    }
     return changed;
   }
 
-  function setIdentityName(id, value) {
-    const slot = getSlot(id);
-    if (!slot?.visible) return false;
+  function setClusterIdentityName(clusterKey, value) {
+    const cluster = getCluster(clusterKey);
+    if (!cluster?.identityLocked) return false;
     const name = String(value ?? '').trim();
-    if (slot.identityName === name) return false;
-    slot.identityName = name;
-    if (name && slot.clusterKey && !slot.identityKey) slot.identityKey = slot.clusterKey;
+    if (!name || cluster.identityName === name) return false;
+    cluster.identityName = name;
     publish('identity-name');
     return true;
-  }
-
-  function clearIdentity(id) {
-    const slot = getSlot(id);
-    if (!slot?.visible) return false;
-    const changed = Boolean(slot.identityKey || slot.identityName || slot.pendingLearn);
-    slot.identityKey = null;
-    slot.identityName = '';
-    slot.pendingLearn = slot.locked;
-    if (changed) publish('identity-clear');
-    return changed;
   }
 
   function setSolo(id, enabled) {
@@ -696,8 +782,8 @@ export function createIdStore({
 
   function selectCluster(key, { additive = false } = {}) {
     const cluster = getCluster(key);
-    if (!cluster?.visible) return false;
-    const slot = slotForCluster(cluster.key);
+    if (!cluster || (!cluster.visible && !cluster.identityLocked)) return false;
+    const slot = slotForCluster(cluster.key) ?? slotForIdentity(cluster.key);
 
     if (!additive) selectedSlotIds.clear();
     if (slot?.visible) selectedSlotIds.add(slot.id);
@@ -737,8 +823,7 @@ export function createIdStore({
     lockAllActive,
     lockAll,
     unlockAll,
-    setIdentityName,
-    clearIdentity,
+    setClusterIdentityName,
     setSolo,
     setManual,
     setManualPosition,
