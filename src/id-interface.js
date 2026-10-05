@@ -740,15 +740,49 @@ export function createIdInterface({ store }) {
     dropPreviewSignature = '';
   }
 
-  function movePreviewElement(element, destination) {
-    if (!element || !destination) return;
-    const from = element.getBoundingClientRect();
-    const to = destination.getBoundingClientRect();
-    const dx = to.left + (to.width - from.width) / 2 - from.left;
-    const dy = to.top + (to.height - from.height) / 2 - from.top;
-    element.style.setProperty('--drop-preview-x', `${dx}px`);
-    element.style.setProperty('--drop-preview-y', `${dy}px`);
+  function previewOffset(origin, destination) {
+    const from = origin?.getBoundingClientRect();
+    const to = destination?.getBoundingClientRect();
+    if (!from || !to) return null;
+    return {
+      x: to.left + to.width / 2 - (from.left + from.width / 2),
+      y: to.top + to.height / 2 - (from.top + from.height / 2)
+    };
+  }
+
+  function setMovingPreview(element, origin, destination) {
+    if (!element || !origin || !destination) return;
+    const offset = previewOffset(origin, destination);
+    if (!offset) return;
+    element.classList.remove('drop-preview-removing');
+    element.style.setProperty('--drop-preview-x', `${offset.x}px`);
+    element.style.setProperty('--drop-preview-y', `${offset.y}px`);
     element.classList.add('drop-preview-moving');
+  }
+
+  function setRemovingPreview(element) {
+    if (!element) return;
+    element.classList.remove('drop-preview-moving');
+    element.style.removeProperty('--drop-preview-x');
+    element.style.removeProperty('--drop-preview-y');
+    element.classList.add('drop-preview-removing');
+  }
+
+  function reconcileDropPreview(desired) {
+    const current = new Set(
+      idList.querySelectorAll('.drop-preview-moving, .drop-preview-removing')
+    );
+
+    for (const [element, preview] of desired) {
+      current.delete(element);
+      if (preview.kind === 'move') {
+        setMovingPreview(element, preview.origin, preview.destination);
+      } else if (preview.kind === 'remove') {
+        setRemovingPreview(element);
+      }
+    }
+
+    for (const element of current) clearPreviewElement(element);
   }
 
   function applyDropPreview(clientX, clientY, target) {
@@ -763,37 +797,54 @@ export function createIdInterface({ store }) {
     ].join('|');
     if (signature === dropPreviewSignature) return;
 
-    clearDropPreview();
     dropPreviewSignature = signature;
 
     const snapshot = store.snapshot();
     const sourceSlot = assignedSlotForCluster(snapshot, dragState.key);
     const sourceCapsule = slotCapsule(sourceSlot?.id);
+    const desired = new Map();
 
     if (!target) {
       if (!insideIdPanel && dragState.sourceOrigin === 'id' && sourceCapsule) {
-        sourceCapsule.classList.add('drop-preview-removing');
+        desired.set(sourceCapsule, { kind: 'remove' });
       }
+      reconcileDropPreview(desired);
       return;
     }
 
     const targetWell = slotWell(target.id);
-    if (!targetWell || sourceSlot?.id === target.id) return;
+    const sourceWell = slotWell(sourceSlot?.id);
+    if (!targetWell || sourceSlot?.id === target.id) {
+      reconcileDropPreview(desired);
+      return;
+    }
 
-    if (sourceCapsule) movePreviewElement(sourceCapsule, targetWell);
+    if (sourceCapsule && sourceWell) {
+      desired.set(sourceCapsule, {
+        kind: 'move',
+        origin: sourceWell,
+        destination: targetWell
+      });
+    }
 
     const preview = resolveClusterDropPreview(snapshot, dragState.key, target.id);
-    if (!preview.displaced) return;
-
-    const targetCapsule = slotCapsule(target.id);
-    if (!targetCapsule) return;
-
-    const displacedDestination = slotWell(preview.displacedTo);
-    if (displacedDestination) {
-      movePreviewElement(targetCapsule, displacedDestination);
-    } else {
-      targetCapsule.classList.add('drop-preview-removing');
+    if (preview.displaced) {
+      const targetCapsule = slotCapsule(target.id);
+      if (targetCapsule) {
+        const displacedDestination = slotWell(preview.displacedTo);
+        if (displacedDestination) {
+          desired.set(targetCapsule, {
+            kind: 'move',
+            origin: targetWell,
+            destination: displacedDestination
+          });
+        } else {
+          desired.set(targetCapsule, { kind: 'remove' });
+        }
+      }
     }
+
+    reconcileDropPreview(desired);
   }
 
   function pointInsideIdPanel(clientX, clientY) {
