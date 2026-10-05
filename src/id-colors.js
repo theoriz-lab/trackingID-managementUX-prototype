@@ -1,5 +1,6 @@
 export const UNASSIGNED_ID_COLOR_VALUE = 0x8a909b;
 export const UNASSIGNED_ID_COLOR_CSS = '#8a909b';
+const ID_ZERO_COLOR = 0x7cf7ff;
 
 const ID_PALETTE = Object.freeze([
   0x10d9ff, // 1 cyan
@@ -18,7 +19,8 @@ const ID_PALETTE = Object.freeze([
 
 export function idColorValue(id) {
   const numericId = Number(id);
-  if (!Number.isInteger(numericId) || numericId < 1) return UNASSIGNED_ID_COLOR_VALUE;
+  if (!Number.isInteger(numericId) || numericId < 0) return UNASSIGNED_ID_COLOR_VALUE;
+  if (numericId === 0) return ID_ZERO_COLOR;
   return ID_PALETTE[(numericId - 1) % ID_PALETTE.length];
 }
 
