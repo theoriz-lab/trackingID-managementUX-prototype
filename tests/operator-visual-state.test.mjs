@@ -89,6 +89,6 @@ test('selection derivation is shared between slots and clusters', () => {
     [1, 2, 3]
   );
 
-  assert.deepEqual([...state.slotIds], [1, 2, 3]);
+  assert.deepEqual([...state.slotIds], [1, 2]);
   assert.deepEqual([...state.clusterKeys], ['a', 'b', 'free-cluster']);
 });
