@@ -42,15 +42,65 @@ test('lock and learn reserves an ID while the learned cluster is missing', () =>
   assert.equal(state.slots[0].clusterKey, 'alice');
 });
 
-test('manual assignment kicks an occupied cluster to the next eligible ID', () => {
-  const store = createIdStore({ count: 4 });
+test('Kick moves the displaced cluster to another free eligible ID', () => {
+  const store = createIdStore({ count: 4, occupiedDropMode: 'kick' });
   store.syncFrame([cluster('a', 1), cluster('b', 2)]);
   const result = store.assignClusterToId('b', 1);
   const state = store.snapshot();
 
   assert.equal(result.ok, true);
+  assert.equal(result.occupiedDropMode, 'kick');
+  assert.equal(state.slots[0].clusterKey, 'b');
+  assert.equal(state.slots[1].clusterKey, null);
+  assert.equal(state.slots[2].clusterKey, 'a');
+});
+
+test('Kick releases the displaced cluster when no other free ID exists', () => {
+  const store = createIdStore({ count: 2, occupiedDropMode: 'kick' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+
+  const result = store.assignClusterToId('b', 1);
+  let state = store.snapshot();
+  assert.equal(result.ok, true);
+  assert.equal(result.displacedKey, 'a');
+  assert.equal(result.displacedTo, null);
+  assert.equal(state.slots[0].clusterKey, 'b');
+  assert.equal(state.slots[1].clusterKey, null);
+
+  // The released cluster must stay unassigned for this tracking lifetime.
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  state = store.snapshot();
+  assert.equal(state.slots.some((slot) => slot.clusterKey === 'a'), false);
+});
+
+test('Swap exchanges the dragged and target cluster IDs', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+
+  const result = store.assignClusterToId('b', 1);
+  const state = store.snapshot();
+  assert.equal(result.ok, true);
+  assert.equal(result.occupiedDropMode, 'swap');
   assert.equal(state.slots[0].clusterKey, 'b');
   assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(result.displacedTo, 2);
+});
+
+test('Swap releases the target cluster when the dragged cluster was unassigned', () => {
+  const store = createIdStore({ count: 1, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
+  const result = store.assignClusterToId('waiting', 1);
+
+  let state = store.snapshot();
+  assert.equal(result.ok, true);
+  assert.equal(state.slots[0].clusterKey, 'waiting');
+  assert.equal(result.displacedKey, 'occupied');
+  assert.equal(result.displacedTo, null);
+
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'waiting');
+  assert.equal(state.slots.some((slot) => slot.clusterKey === 'occupied'), false);
 });
 
 test('pending lock on an empty ID waits for an explicit assignment and then learns it', () => {
@@ -272,6 +322,7 @@ test('changing Min and Max IDs removes slots outside the managed range', () => {
   assert.deepEqual(state.options, {
     strictMode: false,
     allowDelete: false,
+    occupiedDropMode: 'kick',
     minId: 2,
     maxId: 4
   });
@@ -570,4 +621,14 @@ test('locked identity reappears into its reserved slot', () => {
   assert.equal(state.slots[0].clusterKey, 'a');
   assert.equal(state.slots[0].identityKey, 'a');
   assert.equal(state.clusters.find((item) => item.key === 'a').identityLocked, true);
+});
+
+
+test('occupied drop mode can switch between Kick and Swap', () => {
+  const store = createIdStore({ count: 2 });
+  assert.equal(store.snapshot().options.occupiedDropMode, 'kick');
+  assert.equal(store.setOccupiedDropMode('swap'), true);
+  assert.equal(store.snapshot().options.occupiedDropMode, 'swap');
+  assert.equal(store.setOccupiedDropMode('invalid'), false);
+  assert.equal(store.snapshot().options.occupiedDropMode, 'swap');
 });

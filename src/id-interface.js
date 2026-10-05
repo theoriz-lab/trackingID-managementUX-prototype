@@ -90,6 +90,8 @@ export function createIdInterface({ store }) {
   const strictModeInput = document.querySelector('#strict-mode');
   const strictModeLabel = document.querySelector('#strict-mode-label');
   const strictModeHelp = document.querySelector('#strict-mode-help');
+  const occupiedDropKickInput = document.querySelector('#occupied-drop-kick');
+  const occupiedDropSwapInput = document.querySelector('#occupied-drop-swap');
   const minIdInput = document.querySelector('#min-id');
   const maxIdInput = document.querySelector('#max-id');
   const allowDeleteInput = document.querySelector('#allow-slot-delete');
@@ -305,6 +307,10 @@ export function createIdInterface({ store }) {
     strictModeHelp.textContent = snapshot.options.strictMode
       ? 'Overflow clusters stay refused until they leave tracking'
       : 'Overflow clusters wait for the next free ID';
+    if (document.activeElement !== occupiedDropKickInput && document.activeElement !== occupiedDropSwapInput) {
+      occupiedDropKickInput.checked = snapshot.options.occupiedDropMode === 'kick';
+      occupiedDropSwapInput.checked = snapshot.options.occupiedDropMode === 'swap';
+    }
     if (document.activeElement !== allowDeleteInput) allowDeleteInput.checked = snapshot.options.allowDelete;
     if (document.activeElement !== minIdInput) minIdInput.value = String(snapshot.options.minId);
     if (document.activeElement !== maxIdInput) maxIdInput.value = String(snapshot.options.maxId);
@@ -380,6 +386,12 @@ export function createIdInterface({ store }) {
   strictModeInput.addEventListener('change', () => {
     store.setStrictMode(strictModeInput.checked);
   });
+
+  for (const input of [occupiedDropKickInput, occupiedDropSwapInput]) {
+    input.addEventListener('change', () => {
+      if (input.checked) store.setOccupiedDropMode(input.value);
+    });
+  }
 
   allowDeleteInput.addEventListener('change', () => {
     store.setAllowDelete(allowDeleteInput.checked);

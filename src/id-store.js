@@ -62,6 +62,7 @@ export function createIdStore({
   maxId,
   strictMode = false,
   allowDelete = false,
+  occupiedDropMode = 'kick',
   initialSoloIds = [],
   onChange
 } = {}) {
@@ -72,6 +73,7 @@ export function createIdStore({
   let options = {
     strictMode: Boolean(strictMode),
     allowDelete: Boolean(allowDelete),
+    occupiedDropMode: occupiedDropMode === 'swap' ? 'swap' : 'kick',
     minId: firstId,
     maxId: lastId
   };
@@ -303,12 +305,39 @@ export function createIdStore({
 
     let displacedTo = null;
     if (displacedKey && displacedKey !== clusterKey) {
-      const free = nextFreeSlot(new Set([targetSlot.id]));
-      if (free) {
-        free.clusterKey = displacedKey;
-        if (displacedCluster?.identityLocked) reserveClusterIdentity(free, displacedKey);
-        else learnIdentityIfNeeded(free, displacedKey);
-        displacedTo = free.id;
+      if (operator && options.occupiedDropMode === 'swap') {
+        if (sourceSlot) {
+          sourceSlot.clusterKey = displacedKey;
+          heldClusters.delete(displacedKey);
+          refusedClusters.delete(displacedKey);
+          if (displacedCluster?.identityLocked) reserveClusterIdentity(sourceSlot, displacedKey);
+          else learnIdentityIfNeeded(sourceSlot, displacedKey);
+          displacedTo = sourceSlot.id;
+        } else {
+          // There is no source ID to swap back into. Treat the displaced
+          // cluster as explicitly released until it leaves tracking.
+          heldClusters.add(displacedKey);
+          refusedClusters.delete(displacedKey);
+        }
+      } else {
+        // Kick must not silently collapse into a swap by using the ID that
+        // the dragged cluster just vacated. Look for another eligible free ID.
+        const excludedIds = new Set([targetSlot.id]);
+        if (sourceSlot) excludedIds.add(sourceSlot.id);
+        const free = nextFreeSlot(excludedIds);
+        if (free) {
+          free.clusterKey = displacedKey;
+          heldClusters.delete(displacedKey);
+          refusedClusters.delete(displacedKey);
+          if (displacedCluster?.identityLocked) reserveClusterIdentity(free, displacedKey);
+          else learnIdentityIfNeeded(free, displacedKey);
+          displacedTo = free.id;
+        } else if (operator) {
+          // No free ID remains: an operator Kick explicitly releases the
+          // displaced cluster rather than letting auto-allocation reclaim it.
+          heldClusters.add(displacedKey);
+          refusedClusters.delete(displacedKey);
+        }
       }
     }
 
@@ -318,7 +347,8 @@ export function createIdStore({
       from: sourceSlot?.id ?? null,
       to: targetSlot.id,
       displacedKey: displacedKey ?? null,
-      displacedTo
+      displacedTo,
+      occupiedDropMode: operator ? options.occupiedDropMode : null
     };
   }
 
@@ -524,6 +554,14 @@ export function createIdStore({
     if (options.allowDelete === next) return false;
     options.allowDelete = next;
     publish('allow-delete');
+    return true;
+  }
+
+  function setOccupiedDropMode(mode) {
+    if (mode !== 'swap' && mode !== 'kick') return false;
+    if (options.occupiedDropMode === mode) return false;
+    options.occupiedDropMode = mode;
+    publish('occupied-drop-mode');
     return true;
   }
 
@@ -803,6 +841,7 @@ export function createIdStore({
     setEnabled,
     setStrictMode,
     setAllowDelete,
+    setOccupiedDropMode,
     setIdRange,
     deleteSlot,
     restoreDeletedSlots,
