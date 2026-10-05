@@ -35,7 +35,7 @@ export function describeClusterDropAction(
   if (targetSlot) {
     if (sourceSlot?.id === targetSlot.id) return `Keep ID ${targetSlot.id}?`;
     if (targetSlot.clusterKey && targetSlot.clusterKey !== key) {
-      return snapshot.options.occupiedDropMode === 'swap'
+      return snapshot.options.occupiedDropMode === 'swap' && sourceSlot
         ? `Swap with ID ${targetSlot.id}?`
         : `Kick ID ${targetSlot.id}?`;
     }
@@ -70,11 +70,11 @@ export function resolveClusterDropPreview(snapshot, key, targetId) {
     };
   }
 
-  if (snapshot.options.occupiedDropMode === 'swap') {
+  if (snapshot.options.occupiedDropMode === 'swap' && sourceSlot) {
     return {
-      sourceId: sourceSlot?.id ?? null,
+      sourceId: sourceSlot.id,
       targetId: targetSlot.id,
-      displacedTo: sourceSlot?.id ?? null,
+      displacedTo: sourceSlot.id,
       displaced: true
     };
   }
