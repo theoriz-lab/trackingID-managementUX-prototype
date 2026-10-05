@@ -63,6 +63,7 @@ export function createIdStore({
   maxId,
   strictMode = false,
   allowDelete = false,
+  initialSoloIds = [],
   onChange
 } = {}) {
   const firstId = normalizedId(minId, 1);
@@ -80,20 +81,44 @@ export function createIdStore({
     { length: lastId - firstId + 1 },
     (_, index) => makeSlot(firstId + index)
   );
+  const initialSoloSet = new Set(
+    (initialSoloIds ?? [])
+      .map(Number)
+      .filter(Number.isInteger)
+  );
+  for (const slot of slots) slot.solo = initialSoloSet.has(slot.id);
 
   const clusters = new Map();
   let nextClusterOrdinal = 0;
   const heldClusters = new Set();
   const refusedClusters = new Set();
   let selected = null;
+  const selectedSlotIds = new Set();
 
   const publish = (reason) => onChange?.(snapshot(), reason);
+
+  function visibleSelectedSlotIds() {
+    return [...selectedSlotIds].filter((id) => getSlot(id)?.visible);
+  }
+
+  function fallbackPrimarySelection() {
+    const ids = visibleSelectedSlotIds();
+    selected = ids.length ? { type: 'id', id: ids.at(-1) } : null;
+  }
+
+  function pruneSelection() {
+    for (const id of [...selectedSlotIds]) {
+      if (!getSlot(id)?.visible) selectedSlotIds.delete(id);
+    }
+    if (selected?.type === 'id' && !getSlot(selected.id)?.visible) fallbackPrimarySelection();
+  }
 
   function snapshot() {
     return {
       slots: slots.map(cloneSlot),
       clusters: [...clusters.values()].map(cloneCluster),
       selected: selected ? { ...selected } : null,
+      selectedSlotIds: visibleSelectedSlotIds(),
       options: { ...options }
     };
   }
@@ -307,6 +332,7 @@ export function createIdStore({
 
     if (selected?.type === 'cluster' && !getCluster(selected.key)?.visible) {
       selected = null;
+      selectedSlotIds.clear();
       changed = true;
     }
 
@@ -338,6 +364,8 @@ export function createIdStore({
 
     const result = assignClusterInternal(String(clusterKey), slot, { operator: true });
     if (result.ok) {
+      selectedSlotIds.clear();
+      selectedSlotIds.add(slot.id);
       selected = { type: 'id', id: slot.id };
       publish('assign');
     }
@@ -430,7 +458,7 @@ export function createIdStore({
     options = { ...options, minId: nextMin, maxId: nextMax };
     refusedClusters.clear();
 
-    if (selected?.type === 'id' && !getSlot(selected.id)) selected = null;
+    pruneSelection();
     assignWaitingClusters();
     publish('id-range');
     return true;
@@ -449,7 +477,8 @@ export function createIdStore({
     slot.pendingLearn = false;
     slot.clusterKey = null;
 
-    if (selected?.type === 'id' && selected.id === slot.id) selected = null;
+    selectedSlotIds.delete(slot.id);
+    if (selected?.type === 'id' && selected.id === slot.id) fallbackPrimarySelection();
     assignWaitingClusters();
     publish('delete-slot');
     return true;
@@ -569,11 +598,6 @@ export function createIdStore({
     return changed;
   }
 
-  // Compatibility alias retained for the previous prototype/test vocabulary.
-  function lockAllVisible() {
-    return lockAllActive();
-  }
-
   function setIdentityName(id, value) {
     const slot = getSlot(id);
     if (!slot?.visible) return false;
@@ -635,21 +659,45 @@ export function createIdStore({
     return true;
   }
 
-  function selectId(id) {
+  function selectId(id, { additive = false } = {}) {
     const slot = getSlot(id);
-    selected = slot?.visible ? { type: 'id', id: slot.id } : null;
+    if (!slot?.visible) return false;
+
+    if (!additive) {
+      selectedSlotIds.clear();
+      selectedSlotIds.add(slot.id);
+      selected = { type: 'id', id: slot.id };
+      publish('select');
+      return true;
+    }
+
+    if (selectedSlotIds.has(slot.id)) {
+      selectedSlotIds.delete(slot.id);
+      if (selected?.type === 'id' && selected.id === slot.id) fallbackPrimarySelection();
+    } else {
+      selectedSlotIds.add(slot.id);
+      selected = { type: 'id', id: slot.id };
+    }
     publish('select');
+    return true;
   }
 
-  function selectCluster(key) {
+  function selectCluster(key, { additive = false } = {}) {
     const cluster = getCluster(key);
-    selected = cluster ? { type: 'cluster', key: cluster.key } : null;
+    if (!cluster?.visible) return false;
+    const slot = slotForCluster(cluster.key);
+
+    if (!additive) selectedSlotIds.clear();
+    if (slot?.visible) selectedSlotIds.add(slot.id);
+    selected = { type: 'cluster', key: cluster.key };
     publish('select');
+    return true;
   }
 
   function clearSelection() {
-    if (!selected) return;
+    if (!selected && selectedSlotIds.size === 0) return;
     selected = null;
+    selectedSlotIds.clear();
     publish('select');
   }
 
@@ -676,7 +724,6 @@ export function createIdStore({
     toggleClusterLock,
     lockAllActive,
     lockAll,
-    lockAllVisible,
     unlockAll,
     setIdentityName,
     clearIdentity,
