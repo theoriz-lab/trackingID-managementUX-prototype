@@ -7,6 +7,7 @@ This repository is an interaction prototype for Augmenta ID management. Keep it 
 - Keep protocol parsing and transport behavior in the Augmenta JavaScript SDK or `src/connection.js`. Do not reimplement the wire protocol in the prototype.
 - Keep live setup merging in `src/setup-store.js` and 3D presentation/camera behavior in `src/viewer.js`.
 - Keep the operator-only ID model in `src/id-store.js`. Until the backend contract exists, do not disguise local prototype mutations as server writes.
+- Keep pure drag/drop planning and eligibility rules in `src/id-drop-policy.js` so store mutations and hover previews cannot drift apart.
 - Keep DOM/operator interaction in `src/id-interface.js` and app orchestration in `src/main.js`.
 - The viewer consumes Augmenta data in the requested Three.js convention: Y-up, right-handed, bottom-left origin, absolute coordinates, metres.
 
@@ -34,7 +35,7 @@ Additional behavior:
 - Min/Max define the managed ID range and ID 0 is valid. Shrinking the range removes slots outside it; expanding creates fresh slots for newly included IDs.
 - Deleted slots are hidden and disabled. Automatic allocation, Solo state and every bulk action must ignore hidden slots. Restoring a deleted slot must not silently re-enable it.
 - Bulk actions are distinct: Lock all active targets occupied enabled visible slots; Lock all targets every visible slot; Unlock all targets every visible slot. The output-state bulk control shows Enable all only when every visible slot is disabled; otherwise it shows Disable all. Disable all and Unlock all occupy the left column.
-- Manual takeover keeps background tracking associated with the ID.
+- Manual takeover keeps background tracking associated with the ID. When an operator assignment moves a cluster, Manual state and its manual position move atomically with that cluster; releasing the cluster clears Manual so the vacated ID cannot remain accidentally reserved.
 - `identityKey` is currently a cluster-key/UUID placeholder for UX testing, not a production ReID descriptor. Do not infer or claim true identity recognition in this prototype.
 
 ## Interaction
