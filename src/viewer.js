@@ -152,11 +152,14 @@ export function createViewer(host) {
   let viewStateChangeHandler;
   let clusterSelectionHandler;
   let clusterDragHandler;
+  let clusterContextHandler;
   let selectedClusterKeys = new Set();
   let soloMode = false;
   let soloSlotIds = new Set();
   let soloClusterKeys = new Set();
   let pickGesture = null;
+  let rightPointerGesture = null;
+  let suppressContextMenuUntil = 0;
   let cameraUserControlled = false;
   let activeView = PERSPECTIVE_VIEW_ID;
 
@@ -902,6 +905,7 @@ export function createViewer(host) {
       labelText: id === undefined ? '' : String(id),
       labelColor: color.clone(),
       labelColorHex: color.getHex(),
+      labelSelected: false,
       sourceId: id,
       uuid: '',
       operatorStateReady: false,
@@ -927,7 +931,7 @@ export function createViewer(host) {
   }
 
   if (view.labelText !== labelText) {
-    replaceLabelTexture(view.label, labelText, view.labelColor);
+    replaceLabelTexture(view.label, labelText, view.labelColor, view.labelSelected);
     view.labelText = labelText;
     view.labelColorHex = view.labelColor.getHex();
   }
@@ -1165,6 +1169,10 @@ export function createViewer(host) {
     clusterDragHandler = typeof handler === 'function' ? handler : undefined;
   }
 
+  function setClusterContextHandler(handler) {
+    clusterContextHandler = typeof handler === 'function' ? handler : undefined;
+  }
+
   function raycastFloor(clientX, clientY) {
     const rect = renderer.domElement.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return null;
@@ -1192,28 +1200,37 @@ export function createViewer(host) {
     soloClusterKeys = operatorVisualState.soloClusterKeys;
     selectedClusterKeys = selection.clusterKeys;
 
+    const clusterByKey = new Map(clusters.map((cluster) => [cluster.key, cluster]));
+
     for (const view of views.values()) {
       const slot = slotByCluster.get(view.key);
-      const nextColor = slot ? idColorValue(slot.id) : UNASSIGNED_ID_COLOR_VALUE;
+      const cluster = clusterByKey.get(view.key);
+      const nextColor = slot?.enabled
+        ? idColorValue(slot.id)
+        : UNASSIGNED_ID_COLOR_VALUE;
       const colorChanged = view.color.getHex() !== nextColor;
       const wasManualSource = view.manualSource;
+      const selected = selectedClusterKeys.has(view.key);
+      const selectionChanged = view.labelSelected !== selected;
+
       view.color.setHex(nextColor);
       view.assignedId = slot?.id ?? null;
       view.manualSource = Boolean(slot?.manual);
       view.operatorStateReady = true;
       view.operatorId = slot?.id ?? null;
-      view.operatorLabelText = operatorLabelForCluster(slot, view.key);
-      const labelColor = view.manualSource || (slot && !slot.enabled)
-        ? UNASSIGNED_COLOR
-        : view.color;
+      view.operatorLabelText = operatorLabelForCluster(slot, cluster);
+      view.labelSelected = selected;
+
+      const labelColor = view.manualSource ? UNASSIGNED_COLOR : view.color;
       view.labelColor.copy(labelColor);
       if (
         (colorChanged
           || wasManualSource !== view.manualSource
+          || selectionChanged
           || view.labelColorHex !== labelColor.getHex())
         && view.labelText
       ) {
-        replaceLabelTexture(view.label, view.labelText, labelColor);
+        replaceLabelTexture(view.label, view.labelText, labelColor, selected);
         view.labelColorHex = labelColor.getHex();
       }
       updateLabel(view, view.sourceId, view.uuid);
@@ -1243,8 +1260,13 @@ export function createViewer(host) {
       }
       view.clusterKey = slot.clusterKey;
       view.hitbox.userData.clusterKey = slot.clusterKey;
-      view.color.setHex(idColorValue(slot.id));
-      setManualViewColor(view, view.color, slot.enabled ? view.color : UNASSIGNED_COLOR);
+      view.color.setHex(slot.enabled ? idColorValue(slot.id) : UNASSIGNED_ID_COLOR_VALUE);
+      setManualViewColor(
+        view,
+        view.color,
+        view.color,
+        Boolean(slot.clusterKey && selectedClusterKeys.has(slot.clusterKey))
+      );
       const source = slot.clusterKey ? views.get(slot.clusterKey) : null;
       updateManualSilhouette(view, source);
       view.group.position.set(slot.manualPosition[0], FLOOR_Y + 0.016, slot.manualPosition[2]);
@@ -1264,7 +1286,12 @@ export function createViewer(host) {
         source.manualSource = true;
         source.labelColor.copy(UNASSIGNED_COLOR);
         if (source.labelText) {
-          replaceLabelTexture(source.label, source.labelText, UNASSIGNED_COLOR);
+          replaceLabelTexture(
+            source.label,
+            source.labelText,
+            UNASSIGNED_COLOR,
+            selectedClusterKeys.has(source.key)
+          );
           source.labelColorHex = UNASSIGNED_COLOR.getHex();
         }
         applyInteractionStyle(source);
@@ -1377,15 +1404,19 @@ export function createViewer(host) {
     };
   }
 
-  function setManualViewColor(view, color, labelColor = color) {
+  function setManualViewColor(view, color, labelColor = color, selected = false) {
     view.points.material.color.copy(color);
     view.centroid.material.color.copy(color);
     view.glow.material.color.copy(color);
     view.donut.material.color.copy(color);
     view.link.material.color.copy(color);
-    if (view.label.userData.colorHex !== labelColor.getHex()) {
-      replaceLabelTexture(view.label, `${view.id} · Manual`, labelColor);
+    if (
+      view.label.userData.colorHex !== labelColor.getHex()
+      || view.label.userData.selected !== selected
+    ) {
+      replaceLabelTexture(view.label, `${view.id} · Manual`, labelColor, selected);
       view.label.userData.colorHex = labelColor.getHex();
+      view.label.userData.selected = selected;
     }
   }
 
@@ -1488,7 +1519,12 @@ export function createViewer(host) {
       source.manualSource = false;
       source.color.setHex(idColorValue(view.id));
       if (source.labelText) {
-        replaceLabelTexture(source.label, source.labelText, source.labelColor);
+        replaceLabelTexture(
+          source.label,
+          source.labelText,
+          source.labelColor,
+          selectedClusterKeys.has(source.key)
+        );
         source.labelColorHex = source.labelColor.getHex();
       }
       applyInteractionStyle(source);
@@ -1700,6 +1736,14 @@ export function createViewer(host) {
   new ResizeObserver(resize).observe(host);
 
   renderer.domElement.addEventListener('pointerdown', (event) => {
+    if (event.button === 2) {
+      rightPointerGesture = {
+        x: event.clientX,
+        y: event.clientY,
+        moved: false
+      };
+      return;
+    }
     if (event.button !== 0) return;
     const target = pickSceneTargetAt(event.clientX, event.clientY);
     pickGesture = {
@@ -1713,6 +1757,17 @@ export function createViewer(host) {
   });
 
   renderer.domElement.addEventListener('pointermove', (event) => {
+    if (rightPointerGesture && (event.buttons & 2)) {
+      if (
+        Math.hypot(
+          event.clientX - rightPointerGesture.x,
+          event.clientY - rightPointerGesture.y
+        ) >= PICK_MAX_MOVEMENT_PX
+      ) {
+        rightPointerGesture.moved = true;
+      }
+    }
+
     if (!pickGesture || pickGesture.pointerId !== event.pointerId || !pickGesture.target) return;
     const distance = Math.hypot(event.clientX - pickGesture.x, event.clientY - pickGesture.y);
     if (!pickGesture.dragging && distance >= PICK_MAX_MOVEMENT_PX) {
@@ -1741,6 +1796,14 @@ export function createViewer(host) {
   }, { passive: false });
 
   renderer.domElement.addEventListener('pointerup', (event) => {
+    if (event.button === 2 && rightPointerGesture) {
+      if (rightPointerGesture.moved) {
+        suppressContextMenuUntil = performance.now() + 300;
+      }
+      rightPointerGesture = null;
+      return;
+    }
+
     if (!pickGesture || pickGesture.pointerId !== event.pointerId) return;
     const gesture = pickGesture;
     pickGesture = null;
@@ -1763,6 +1826,7 @@ export function createViewer(host) {
   });
 
   renderer.domElement.addEventListener('pointercancel', (event) => {
+    if (event.button === 2) rightPointerGesture = null;
     if (pickGesture?.dragging && pickGesture.target) {
       clusterDragHandler?.({
         phase: 'cancel',
@@ -1775,6 +1839,19 @@ export function createViewer(host) {
       });
     }
     pickGesture = null;
+  });
+
+  renderer.domElement.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    if (performance.now() < suppressContextMenuUntil) return;
+
+    const key = pickClusterAt(event.clientX, event.clientY);
+    if (!key || !selectedClusterKeys.has(key)) return;
+    clusterContextHandler?.({
+      key,
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
   });
 
   renderer.domElement.addEventListener('dblclick', (event) => {
@@ -1810,6 +1887,7 @@ export function createViewer(host) {
     pickClusterAt,
     setClusterSelectionHandler,
     setClusterDragHandler,
+    setClusterContextHandler,
     setOperatorState
   };
 }
@@ -1931,7 +2009,7 @@ function disposeArrow(arrow) {
 
 function createLabelSprite(text, color) {
   const material = new THREE.SpriteMaterial({
-    map: makeLabelTexture(text, color),
+    map: makeLabelTexture(text, color, false),
     transparent: true,
     depthTest: false,
     depthWrite: false
@@ -1942,10 +2020,11 @@ function createLabelSprite(text, color) {
   return sprite;
 }
 
-function replaceLabelTexture(sprite, text, color) {
+function replaceLabelTexture(sprite, text, color, selected = false) {
   sprite.material.map?.dispose();
-  sprite.material.map = makeLabelTexture(text, color);
+  sprite.material.map = makeLabelTexture(text, color, selected);
   sprite.material.needsUpdate = true;
+  sprite.userData.selected = selected;
   updateLabelScale(sprite, text);
 }
 
@@ -1975,7 +2054,7 @@ function makeGlowTexture() {
   return texture;
 }
 
-function makeLabelTexture(text, color) {
+function makeLabelTexture(text, color, selected = false) {
   const canvas = document.createElement('canvas');
   canvas.width = 384;
   canvas.height = 128;
@@ -1991,9 +2070,14 @@ function makeLabelTexture(text, color) {
   ctx.fillStyle = 'rgba(10, 13, 18, 0.88)';
   ctx.fill();
 
-  ctx.strokeStyle = cssColor;
-  ctx.lineWidth = 5;
+  ctx.strokeStyle = selected ? '#ffffff' : cssColor;
+  ctx.lineWidth = selected ? 8 : 5;
+  if (selected) {
+    ctx.shadowColor = 'rgba(255,255,255,0.72)';
+    ctx.shadowBlur = 16;
+  }
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
@@ -2006,7 +2090,7 @@ function makeLabelTexture(text, color) {
     ctx.font = '500 24px Inter, Arial, sans-serif';
     ctx.fillText(lines[1], 192, 86, 320);
   } else {
-    ctx.font = '500 42px Inter, Arial, sans-serif';
+    ctx.font = `${selected ? 800 : 500} 42px Inter, Arial, sans-serif`;
     ctx.fillText(lines[0], 192, 65, 320);
   }
 
