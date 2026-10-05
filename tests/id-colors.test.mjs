@@ -17,7 +17,8 @@ test('ID colors are stable and wrap only after the palette', () => {
   assert.equal(idColorCss(3), idColorCss(3));
 });
 
-test('invalid or unassigned IDs use neutral gray', () => {
+test('ID zero is valid while missing IDs stay neutral gray', () => {
   assert.equal(idColorCss(null), UNASSIGNED_ID_COLOR_CSS);
-  assert.equal(idColorCss(0), UNASSIGNED_ID_COLOR_CSS);
+  assert.equal(idColorCss(undefined), UNASSIGNED_ID_COLOR_CSS);
+  assert.notEqual(idColorCss(0), UNASSIGNED_ID_COLOR_CSS);
 });
