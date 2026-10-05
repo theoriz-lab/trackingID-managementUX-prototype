@@ -58,3 +58,15 @@ test('matching identities render above their public ID', () => {
 
   assert.equal(operatorLabelForCluster(slot, 'singer-a'), 'Singer A\nID 4');
 });
+
+
+test('deleted slots do not participate in Solo or cluster mapping', () => {
+  const state = deriveOperatorVisualState([
+    { id: 1, visible: false, enabled: true, solo: true, clusterKey: 'hidden' },
+    { id: 2, visible: true, enabled: true, solo: false, clusterKey: 'visible' }
+  ]);
+
+  assert.equal(state.soloMode, false);
+  assert.equal(state.slotByCluster.has('hidden'), false);
+  assert.equal(state.slotByCluster.get('visible')?.id, 2);
+});

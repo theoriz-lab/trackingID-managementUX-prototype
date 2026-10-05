@@ -33,17 +33,27 @@
           <span id="connection-note">Connecting automatically with Augmenta defaults…</span>
         </div>
 
-        <div id="camera-cube" class="camera-cube" aria-label="Camera orbit cube">
-          <div class="camera-orbit-ring" aria-hidden="true"></div>
-          <div class="camera-cube-inner">
-            <button class="camera-face camera-face-front" type="button" data-camera-view="front" aria-label="Front view">F</button>
-            <button class="camera-face camera-face-back" type="button" data-camera-view="back" aria-label="Back view">B</button>
-            <button class="camera-face camera-face-right" type="button" data-camera-view="right" aria-label="Right view">R</button>
-            <button class="camera-face camera-face-left" type="button" data-camera-view="left" aria-label="Left view">L</button>
-            <button class="camera-face camera-face-top" type="button" data-camera-view="top" aria-label="Top view">Y</button>
-            <button class="camera-face camera-face-bottom" type="button" data-camera-view="bottom" aria-label="Bottom view">−Y</button>
+        <div id="view-cube" class="view-cube" aria-label="View controls">
+          <span class="view-cube-title">Ortho</span>
+          <button class="view-cube-close" type="button" aria-label="Exit orthographic view">×</button>
+          <div id="view-cube-scene" class="view-cube-scene">
+            <div id="view-cube-object" class="view-cube-object">
+              <button class="cube-face cube-face-front" type="button" data-view="front"><span class="cube-face-label">Front</span></button>
+              <button class="cube-face cube-face-back" type="button" data-view="back"><span class="cube-face-label">Back</span></button>
+              <button class="cube-face cube-face-right" type="button" data-view="right"><span class="cube-face-label">Right</span></button>
+              <button class="cube-face cube-face-left" type="button" data-view="left"><span class="cube-face-label">Left</span></button>
+              <button class="cube-face cube-face-top" type="button" data-view="top"><span class="cube-face-label">Top</span></button>
+              <button class="cube-face cube-face-bottom" type="button" data-view="bottom"><span class="cube-face-label">Bottom</span></button>
+            </div>
           </div>
-          <span class="camera-cube-hint">drag to orbit</span>
+          <div id="view-cube-actions" class="view-cube-actions" aria-hidden="true">
+            <button type="button" data-view="top" aria-label="Top view">Top</button>
+            <button type="button" data-view="front" aria-label="Front view">Front</button>
+            <button type="button" data-view="right" aria-label="Right view">Right</button>
+            <button type="button" data-view="left" aria-label="Left view">Left</button>
+            <button type="button" data-view="back" aria-label="Back view">Back</button>
+            <button type="button" data-view="bottom" aria-label="Bottom view">Bottom</button>
+          </div>
         </div>
 
         <div class="cluster-dock" aria-label="Live clusters">
@@ -65,7 +75,11 @@
             </a>
             <div>
               <h1>ID Management</h1>
-              <span><b id="slot-count">12</b> slots</span>
+              <span class="slot-summary">
+                <b id="slot-count">12</b> slots
+                <i aria-hidden="true">·</i>
+                <b id="active-slot-count">12</b> active
+              </span>
             </div>
           </div>
           <div class="id-panel-status">
@@ -74,12 +88,54 @@
               <i aria-hidden="true"></i>
               <span id="connection-status">Connecting</span>
             </div>
+            <button id="id-settings-button" class="id-settings-button" type="button" aria-expanded="false" aria-controls="id-settings-menu" title="ID options" aria-label="ID options">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Zm8.1 4.5v-1.8l-2.05-.72a6.58 6.58 0 0 0-.6-1.45l.94-1.96-1.27-1.27-1.96.94a6.58 6.58 0 0 0-1.45-.6L12.9 4h-1.8l-.72 2.05c-.51.15-1 .35-1.45.6l-1.96-.94L5.7 6.98l.94 1.96c-.25.45-.45.94-.6 1.45L4 11.1v1.8l2.05.72c.15.51.35 1 .6 1.45l-.94 1.96 1.27 1.27 1.96-.94c.45.25.94.45 1.45.6L11.1 20h1.8l.72-2.05c.51-.15 1-.35 1.45-.6l1.96.94 1.27-1.27-.94-1.96c.25-.45.45-.94.6-1.45l2.05-.72Z"/>
+              </svg>
+            </button>
           </div>
         </header>
 
+        <div id="id-settings-menu" class="id-settings-menu" hidden>
+          <div class="settings-menu-header">
+            <strong>ID options</strong>
+            <span id="range-summary">IDs 1–12</span>
+          </div>
+          <label class="settings-toggle">
+            <span>
+              <strong id="strict-mode-label">Non-strict mode</strong>
+              <small id="strict-mode-help">Overflow clusters wait for the next free ID</small>
+            </span>
+            <input id="strict-mode" type="checkbox">
+            <i aria-hidden="true"></i>
+          </label>
+          <div class="settings-range">
+            <label>
+              <span>Min ID</span>
+              <input id="min-id" type="number" min="1" step="1" value="1" inputmode="numeric">
+            </label>
+            <label>
+              <span>Max ID</span>
+              <input id="max-id" type="number" min="1" step="1" value="12" inputmode="numeric">
+            </label>
+          </div>
+          <p class="settings-note">Changing the range removes slots outside Min/Max from this operator view.</p>
+          <label class="settings-toggle">
+            <span>
+              <strong>Allow slot deletion</strong>
+              <small>Shows a delete control on visible slots</small>
+            </span>
+            <input id="allow-slot-delete" type="checkbox">
+            <i aria-hidden="true"></i>
+          </label>
+          <button id="restore-deleted-slots" class="settings-secondary" type="button" data-action="restore-slots" hidden>Restore deleted slots</button>
+        </div>
+
         <div class="id-panel-actions">
-          <button type="button" data-action="lock-all"><span class="lock-symbol closed" aria-hidden="true"></span>Lock all active</button>
-          <button type="button" data-action="unlock-all"><span class="lock-symbol open" aria-hidden="true"></span>Unlock all active</button>
+          <button type="button" data-action="lock-all-active"><span class="lock-symbol closed" aria-hidden="true"></span>Lock all active</button>
+          <button type="button" data-action="lock-all"><span class="lock-symbol closed" aria-hidden="true"></span>Lock all</button>
+          <button type="button" data-action="unlock-all"><span class="lock-symbol open" aria-hidden="true"></span>Unlock all</button>
+          <button id="toggle-all-enabled" type="button" data-action="toggle-all-enabled">Disable all</button>
         </div>
 
         <div class="id-panel-help">
