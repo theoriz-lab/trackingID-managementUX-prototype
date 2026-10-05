@@ -656,7 +656,9 @@ export function createIdStore({
     ) {
       return false;
     }
-    slot.manualPosition = position.slice(0, 3).map((value) => Number(value) || 0);
+    const nextPosition = position.slice(0, 3).map((value) => Number(value) || 0);
+    if (slot.manualPosition.every((value, index) => value === nextPosition[index])) return false;
+    slot.manualPosition = nextPosition;
     publish('manual-position');
     return true;
   }
