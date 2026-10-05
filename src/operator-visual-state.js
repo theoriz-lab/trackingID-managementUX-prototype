@@ -33,9 +33,21 @@ export function operatorClusterName(cluster) {
   return identityName || (cluster?.label ? `Cluster ${cluster.label}` : 'Cluster');
 }
 
+export function slotReservesClusterIdentity(slot, cluster) {
+  return Boolean(
+    slot?.locked
+    && cluster?.identityLocked
+    && slot.identityKey === cluster.key
+  );
+}
+
 export function operatorLabelForCluster(slot, cluster) {
   const identityName = identityNameForCluster(cluster);
-  if (slot) return identityName ? `${slot.id} : ${identityName}` : String(slot.id);
+  if (slot) {
+    return identityName && slotReservesClusterIdentity(slot, cluster)
+      ? `${slot.id} : ${identityName}`
+      : String(slot.id);
+  }
   return identityName;
 }
 
