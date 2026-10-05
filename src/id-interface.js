@@ -813,8 +813,7 @@ export function createIdInterface({ store, onDropPreview } = {}) {
       } else {
         onDropPreview?.(null);
       }
-      onDropPreview?.(resolveClusterDropAssignments(snapshot, dragState.key, target.id));
-    reconcileDropPreview(desired);
+      reconcileDropPreview(desired);
       return;
     }
 
@@ -855,6 +854,7 @@ export function createIdInterface({ store, onDropPreview } = {}) {
       }
     }
 
+    onDropPreview?.(resolveClusterDropAssignments(snapshot, dragState.key, target.id));
     reconcileDropPreview(desired);
   }
 
