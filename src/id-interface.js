@@ -65,6 +65,16 @@ export function createIdInterface({ store }) {
   const liveCount = document.querySelector('#live-count');
   const warningButton = document.querySelector('#warning-button');
   const slotCount = document.querySelector('#slot-count');
+  const activeSlotCount = document.querySelector('#active-slot-count');
+  const toggleAllEnabled = document.querySelector('#toggle-all-enabled');
+  const settingsButton = document.querySelector('#id-settings-button');
+  const settingsMenu = document.querySelector('#id-settings-menu');
+  const strictModeInput = document.querySelector('#strict-mode');
+  const minIdInput = document.querySelector('#min-id');
+  const maxIdInput = document.querySelector('#max-id');
+  const allowDeleteInput = document.querySelector('#allow-slot-delete');
+  const restoreDeletedButton = document.querySelector('#restore-deleted-slots');
+  const rangeSummary = document.querySelector('#range-summary');
   const connectionPill = document.querySelector('.connection-pill');
   const connectionStatus = document.querySelector('#connection-status');
   const connectionNote = document.querySelector('#connection-note');
@@ -113,16 +123,6 @@ export function createIdInterface({ store }) {
           <small class="capsule-coords">${escapeHtml(coordinateText(cluster))}</small>
           <em class="capsule-assignment">${slot ? `ID ${slot.id}` : 'Unassigned'}</em>
         </span>
-        ${manual ? `
-          <button
-            class="manual-return-button"
-            type="button"
-            data-action="release-manual"
-            data-id="${slot.id}"
-            data-no-drag
-            title="Return smoothly to the live cluster"
-            aria-label="Return ID ${slot.id} to live tracking"
-          >↩</button>` : ''}
       </div>`;
   }
 
@@ -133,11 +133,13 @@ export function createIdInterface({ store }) {
       .filter((cluster) => cluster.visible)
       .sort((a, b) => (a.sourceId ?? Number.MAX_SAFE_INTEGER) - (b.sourceId ?? Number.MAX_SAFE_INTEGER));
 
-    const visualState = deriveOperatorVisualState(snapshot.slots);
+    const operatorSlots = snapshot.slots.filter((slot) => slot.visible);
+    const visualState = deriveOperatorVisualState(operatorSlots);
     idList.classList.toggle('solo-mode', visualState.soloMode);
+    idList.classList.toggle('deletion-enabled', snapshot.options.allowDelete);
     clusterTray.classList.toggle('solo-mode', visualState.soloMode);
 
-    idList.innerHTML = snapshot.slots.map((slot) => {
+    idList.innerHTML = operatorSlots.map((slot) => {
       const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
       const selected = snapshot.selected?.type === 'id'
         ? snapshot.selected.id === slot.id
@@ -147,7 +149,8 @@ export function createIdInterface({ store }) {
         'slot-row',
         slot.enabled ? 'enabled' : 'disabled',
         slot.solo ? 'solo' : '',
-        selected ? 'selected' : ''
+        selected ? 'selected' : '',
+        snapshot.options.allowDelete ? 'deletable' : ''
       ].filter(Boolean).join(' ');
       const wellClasses = [
         'slot-well',
@@ -186,6 +189,25 @@ export function createIdInterface({ store }) {
               aria-label="${slot.locked ? 'Unlock' : 'Lock and learn'} ID ${slot.id}"
             ><span class="lock-symbol ${slot.locked ? 'closed' : 'open'}" aria-hidden="true"></span></button>
           </div>
+          <button
+            class="slot-manual-button${slot.manual ? ' active' : ''}"
+            type="button"
+            data-action="toggle-manual"
+            data-id="${slot.id}"
+            data-no-drag
+            title="${slot.manual ? 'Return smoothly to live tracking' : 'Start manual takeover'}"
+            aria-pressed="${slot.manual}"
+          >M</button>
+          ${snapshot.options.allowDelete ? `
+            <button
+              class="slot-delete-button"
+              type="button"
+              data-action="delete-slot"
+              data-id="${slot.id}"
+              data-no-drag
+              title="Delete ID ${slot.id} from the operator view"
+              aria-label="Delete ID ${slot.id}"
+            >×</button>` : ''}
         </article>`;
     }).join('');
 
@@ -199,9 +221,21 @@ export function createIdInterface({ store }) {
       : '<div class="tray-empty">Waiting for live clusters…</div>';
 
     liveCount.textContent = `(${visibleClusters.length})`;
-    slotCount.textContent = String(snapshot.slots.length);
+    slotCount.textContent = String(operatorSlots.length);
+    activeSlotCount.textContent = String(operatorSlots.filter((slot) => slot.enabled).length);
 
-    const warnings = snapshot.slots
+    const allVisibleEnabled = operatorSlots.length > 0 && operatorSlots.every((slot) => slot.enabled);
+    toggleAllEnabled.textContent = allVisibleEnabled ? 'Disable all' : 'Enable all';
+    toggleAllEnabled.classList.toggle('active', !allVisibleEnabled);
+
+    if (document.activeElement !== strictModeInput) strictModeInput.checked = snapshot.options.strictMode;
+    if (document.activeElement !== allowDeleteInput) allowDeleteInput.checked = snapshot.options.allowDelete;
+    if (document.activeElement !== minIdInput) minIdInput.value = String(snapshot.options.minId);
+    if (document.activeElement !== maxIdInput) maxIdInput.value = String(snapshot.options.maxId);
+    rangeSummary.textContent = `IDs ${snapshot.options.minId}–${snapshot.options.maxId}`;
+    restoreDeletedButton.hidden = !snapshot.slots.some((slot) => !slot.visible);
+
+    const warnings = operatorSlots
       .map((slot) => ({ slot, warning: identityWarning(slot) }))
       .filter(({ warning }) => warning);
     warningButton.hidden = warnings.length === 0;
@@ -257,13 +291,24 @@ export function createIdInterface({ store }) {
       case 'toggle-enabled': store.setEnabled(id, !slot?.enabled); break;
       case 'toggle-solo': store.setSolo(id, !slot?.solo); break;
       case 'toggle-lock': slot?.locked ? store.unlock(id) : store.lockAndLearn(id); break;
-      case 'lock-all': store.lockAllVisible(); break;
+      case 'toggle-manual': store.setManual(id, !slot?.manual); break;
+      case 'delete-slot': store.deleteSlot(id); break;
+      case 'restore-slots': store.restoreDeletedSlots(); break;
+      case 'lock-all-active': store.lockAllActive(); break;
+      case 'lock-all': store.lockAll(); break;
       case 'unlock-all': store.unlockAll(); break;
+      case 'toggle-all-enabled': {
+        const visible = snapshot.slots.filter((candidate) => candidate.visible);
+        const allEnabled = visible.length > 0 && visible.every((candidate) => candidate.enabled);
+        store.setAllVisibleEnabled(!allEnabled);
+        break;
+      }
       case 'select-cluster': store.selectCluster(key); break;
       case 'select-id':
-        if (!target.closest?.('.cluster-capsule, .slot-lock-button')) store.selectId(id);
+        if (!target.closest?.('.cluster-capsule, .slot-lock-button, .slot-manual-button, .slot-delete-button')) {
+          store.selectId(id);
+        }
         break;
-      case 'release-manual': store.setManual(id, false); break;
       default: return false;
     }
     return true;
@@ -363,7 +408,7 @@ export function createIdInterface({ store }) {
     contextMenu.innerHTML = `
       <header>${escapeHtml(shortClusterName(cluster))} · assign to ID</header>
       <div class="context-id-grid">
-        ${snapshot.slots.map((slot) => `
+        ${snapshot.slots.filter((slot) => slot.visible).map((slot) => `
           <button
             type="button"
             class="context-id"
