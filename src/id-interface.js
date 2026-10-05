@@ -224,6 +224,7 @@ export function createIdInterface({ store }) {
             data-no-drag
             title="${slot.manual ? 'Return smoothly to live tracking' : 'Start manual takeover'}"
             aria-pressed="${slot.manual}"
+            ${cluster ? '' : 'disabled'}
           >M</button>
           ${snapshot.options.allowDelete ? `
             <button
