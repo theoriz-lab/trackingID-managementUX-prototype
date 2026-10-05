@@ -151,6 +151,7 @@ export function createIdInterface({ store }) {
         'slot-row',
         slot.enabled ? 'enabled' : 'disabled',
         slot.solo ? 'solo' : '',
+        slot.manual ? 'manual' : '',
         selected ? 'selected' : '',
         snapshot.options.allowDelete ? 'deletable' : ''
       ].filter(Boolean).join(' ');
@@ -226,9 +227,11 @@ export function createIdInterface({ store }) {
     slotCount.textContent = String(operatorSlots.length);
     activeSlotCount.textContent = String(operatorSlots.filter((slot) => slot.enabled).length);
 
-    const allVisibleEnabled = operatorSlots.length > 0 && operatorSlots.every((slot) => slot.enabled);
-    toggleAllEnabled.textContent = allVisibleEnabled ? 'Disable all' : 'Enable all';
-    toggleAllEnabled.classList.toggle('active', !allVisibleEnabled);
+    const hasVisibleSlots = operatorSlots.length > 0;
+    const allVisibleDisabled = hasVisibleSlots && operatorSlots.every((slot) => !slot.enabled);
+    toggleAllEnabled.textContent = allVisibleDisabled ? 'Enable all' : 'Disable all';
+    toggleAllEnabled.dataset.enableAll = String(allVisibleDisabled);
+    toggleAllEnabled.disabled = !hasVisibleSlots;
 
     if (document.activeElement !== strictModeInput) strictModeInput.checked = snapshot.options.strictMode;
     strictModeLabel.textContent = snapshot.options.strictMode ? 'Strict mode' : 'Non-strict mode';
@@ -343,12 +346,9 @@ export function createIdInterface({ store }) {
       case 'lock-all-active': store.lockAllActive(); break;
       case 'lock-all': store.lockAll(); break;
       case 'unlock-all': store.unlockAll(); break;
-      case 'toggle-all-enabled': {
-        const visible = snapshot.slots.filter((candidate) => candidate.visible);
-        const allEnabled = visible.length > 0 && visible.every((candidate) => candidate.enabled);
-        store.setAllVisibleEnabled(!allEnabled);
+      case 'set-all-enabled':
+        store.setAllVisibleEnabled(target.dataset.enableAll === 'true');
         break;
-      }
       case 'select-cluster': store.selectCluster(key); break;
       case 'select-id':
         if (!target.closest?.('.cluster-capsule, .slot-lock-button, .slot-manual-button, .slot-delete-button')) {
