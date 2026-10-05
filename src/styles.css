@@ -1118,6 +1118,3 @@ body.dragging-cluster, body.dragging-cluster * { cursor: grabbing !important; }
     inset 0 1px 0 rgba(255,255,255,.17),
     0 0 18px rgba(34,211,238,.16);
 }
-.cluster-capsule.manual {
-  animation: manualCapsulePulse 1.55s ease-in-out infinite;
-}
