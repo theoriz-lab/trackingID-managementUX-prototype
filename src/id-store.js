@@ -1,9 +1,34 @@
 export const DEFAULT_ID_COUNT = 12;
 export const CLUSTER_RETENTION_MS = 30_000;
 
+const FUNNY_IDENTITY_NAMES = Object.freeze([
+  'Biscuit', 'Mochi', 'Pickle', 'Waffles', 'Noodle', 'Mango',
+  'Pebble', 'Sprout', 'Banjo', 'Tofu', 'Rocket', 'Doodle',
+  'Kiwi', 'Pancake', 'Nimbus', 'Pudding', 'Taco', 'Bubbles'
+]);
+
 function normalizedId(value, fallback) {
   const numeric = Math.floor(Number(value));
-  return Number.isInteger(numeric) && numeric >= 1 ? numeric : fallback;
+  return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
+}
+
+function clusterLetter(index) {
+  let value = Math.max(0, Math.floor(index));
+  let label = '';
+  do {
+    label = String.fromCharCode(65 + (value % 26)) + label;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return label;
+}
+
+function nameSeed(value) {
+  let hash = 2166136261;
+  for (const char of String(value ?? '')) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 function makeSlot(id) {
@@ -65,6 +90,7 @@ export function createIdStore({
   );
 
   const clusters = new Map();
+  let nextClusterOrdinal = 0;
   const heldClusters = new Set();
   const refusedClusters = new Set();
   let selected = null;
@@ -121,9 +147,23 @@ export function createIdStore({
 
   function preferredSlotForCluster(cluster) {
     const sourceId = Number(cluster?.sourceId);
-    if (!Number.isInteger(sourceId) || sourceId < 1) return null;
+    if (!Number.isInteger(sourceId) || sourceId < 0) return null;
     const slot = getSlot(sourceId);
     return isAutoEligible(slot) ? slot : null;
+  }
+
+  function funnyIdentityName(clusterKey, slot) {
+    const used = new Set(
+      slots
+        .filter((candidate) => candidate !== slot && candidate.identityName)
+        .map((candidate) => candidate.identityName)
+    );
+    const start = nameSeed(clusterKey) % FUNNY_IDENTITY_NAMES.length;
+    for (let offset = 0; offset < FUNNY_IDENTITY_NAMES.length; offset += 1) {
+      const candidate = FUNNY_IDENTITY_NAMES[(start + offset) % FUNNY_IDENTITY_NAMES.length];
+      if (!used.has(candidate)) return candidate;
+    }
+    return `Buddy ${slot.id}`;
   }
 
   function setLearnedIdentity(slot, clusterKey) {
@@ -132,6 +172,7 @@ export function createIdStore({
     if (changed && slot.identityKey) slot.identityName = '';
     slot.identityKey = clusterKey;
     slot.pendingLearn = false;
+    if (!slot.identityName) slot.identityName = funnyIdentityName(clusterKey, slot);
     return changed;
   }
 
@@ -145,7 +186,7 @@ export function createIdStore({
     const cluster = getCluster(clusterKey);
     if (!cluster || !targetSlot) return { ok: false, reason: 'not-found' };
     if (!targetSlot.visible) return { ok: false, reason: 'hidden' };
-    if (!targetSlot.enabled) return { ok: false, reason: 'disabled' };
+    if (!targetSlot.enabled && !operator) return { ok: false, reason: 'disabled' };
 
     if (operator) {
       heldClusters.delete(clusterKey);
@@ -161,7 +202,14 @@ export function createIdStore({
     const displacedKey = targetSlot.clusterKey;
     if (sourceSlot) sourceSlot.clusterKey = null;
     targetSlot.clusterKey = clusterKey;
-    learnIdentityIfNeeded(targetSlot, clusterKey);
+    if (cluster.lockRequested) {
+      targetSlot.locked = true;
+      targetSlot.pendingLearn = false;
+      setLearnedIdentity(targetSlot, clusterKey);
+      cluster.lockRequested = false;
+    } else {
+      learnIdentityIfNeeded(targetSlot, clusterKey);
+    }
 
     let displacedTo = null;
     if (displacedKey && displacedKey !== clusterKey) {
@@ -229,6 +277,8 @@ export function createIdStore({
       const previous = clusters.get(key);
       const next = {
         key,
+        label: previous?.label ?? clusterLetter(nextClusterOrdinal++),
+        lockRequested: Boolean(previous?.lockRequested),
         uuid: item.uuid ? String(item.uuid) : '',
         sourceId: Number.isInteger(Number(item.sourceId)) ? Number(item.sourceId) : null,
         visible: true,
@@ -288,7 +338,6 @@ export function createIdStore({
     const slot = getSlot(id);
     if (!slot) return { ok: false, reason: 'not-found' };
     if (!slot.visible) return { ok: false, reason: 'hidden' };
-    if (!slot.enabled) return { ok: false, reason: 'disabled' };
 
     const result = assignClusterInternal(String(clusterKey), slot, { operator: true });
     if (result.ok) {
@@ -457,6 +506,32 @@ export function createIdStore({
     return true;
   }
 
+  function toggleClusterLock(clusterKey) {
+    const key = String(clusterKey ?? '');
+    const cluster = getCluster(key);
+    if (!cluster?.visible) return false;
+
+    const assignedSlot = slotForCluster(key);
+    const reservedSlot = slots.find(
+      (slot) => slot.visible && slot.locked && slot.identityKey === key
+    );
+    const lockedSlot = assignedSlot?.locked ? assignedSlot : reservedSlot;
+
+    if (lockedSlot) {
+      cluster.lockRequested = false;
+      return unlock(lockedSlot.id);
+    }
+
+    if (assignedSlot) {
+      cluster.lockRequested = false;
+      return lockAndLearn(assignedSlot.id);
+    }
+
+    cluster.lockRequested = !cluster.lockRequested;
+    publish('cluster-lock');
+    return true;
+  }
+
   function lockAllActive() {
     let changed = false;
     for (const slot of visibleSlots()) {
@@ -601,6 +676,7 @@ export function createIdStore({
     setAllVisibleEnabled,
     lockAndLearn,
     unlock,
+    toggleClusterLock,
     lockAllActive,
     lockAll,
     lockAllVisible,
