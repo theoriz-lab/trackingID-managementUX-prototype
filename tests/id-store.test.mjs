@@ -694,7 +694,8 @@ test('Lock all is idempotent for already locked pending slots', () => {
 
 test('Swap mode uses Kick semantics when the incoming cluster is unassigned', () => {
   const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
-  store.syncFrame([cluster('occupied', 1), cluster('waiting', 9)]);
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
+  store.releaseId(2);
 
   const result = store.assignClusterToId('waiting', 1);
   const state = store.snapshot();
