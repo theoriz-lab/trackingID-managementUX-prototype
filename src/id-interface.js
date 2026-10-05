@@ -1,5 +1,9 @@
 import { idColorCss, UNASSIGNED_ID_COLOR_CSS } from './id-colors.js';
-import { deriveOperatorVisualState, identityNameForCluster } from './operator-visual-state.js';
+import {
+  deriveOperatorVisualState,
+  deriveSelectionState,
+  identityNameForCluster
+} from './operator-visual-state.js';
 
 const DRAG_START_DISTANCE_PX = 7;
 const TOUCH_DRAG_HOLD_MS = 230;
@@ -144,13 +148,13 @@ export function createIdInterface({ store }) {
 
     const operatorSlots = snapshot.slots.filter((slot) => slot.visible);
     const visualState = deriveOperatorVisualState(operatorSlots);
-    const selectedSlotIds = new Set(snapshot.selectedSlotIds ?? []);
-    const selectedClusterKeys = new Set(
-      operatorSlots
-        .filter((slot) => selectedSlotIds.has(slot.id) && slot.clusterKey)
-        .map((slot) => slot.clusterKey)
+    const selection = deriveSelectionState(
+      operatorSlots,
+      snapshot.selected,
+      snapshot.selectedSlotIds
     );
-    if (snapshot.selected?.type === 'cluster') selectedClusterKeys.add(snapshot.selected.key);
+    const selectedSlotIds = selection.slotIds;
+    const selectedClusterKeys = selection.clusterKeys;
 
     idList.classList.toggle('solo-mode', visualState.soloMode);
     idList.classList.toggle('deletion-enabled', snapshot.options.allowDelete);
