@@ -12,6 +12,8 @@ import { createViewer } from './viewer.js';
 const DISCONNECT_CLEANUP_DELAY_MS = 500;
 const SIDE_PANEL_GAP_PX = 18;
 const SIDE_PANEL_MAX_WIDTH_RATIO = 0.62;
+const SOLO_STORAGE_KEY = 'augmenta-id-management-solo-v1';
+const SOLO_PERSIST_REASONS = new Set(['solo', 'delete-slot', 'id-range']);
 
 const DEFAULT_CONNECTION = Object.freeze({
   address: '127.0.0.1',
@@ -31,10 +33,32 @@ viewer.setVisibility({
   vectors: false
 });
 
+function loadSoloIds() {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(SOLO_STORAGE_KEY) ?? '[]');
+    return Array.isArray(value) ? value.filter(Number.isInteger) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSoloIds(snapshot) {
+  try {
+    const ids = snapshot.slots
+      .filter((slot) => slot.visible && slot.solo)
+      .map((slot) => slot.id);
+    window.localStorage.setItem(SOLO_STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    // Storage is optional; the operator state still works for the current session.
+  }
+}
+
 const setupStore = createSetupStore();
 let idInterface;
 const idStore = createIdStore({
-  onChange: (snapshot) => {
+  initialSoloIds: loadSoloIds(),
+  onChange: (snapshot, reason) => {
+    if (SOLO_PERSIST_REASONS.has(reason)) saveSoloIds(snapshot);
     viewer.setOperatorState(snapshot);
     idInterface?.render();
   }
