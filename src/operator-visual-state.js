@@ -11,7 +11,8 @@ export function deriveOperatorVisualState(slots = []) {
     // A visible slot remains a Solo focus target even while its ID is disabled.
     if (!slot.solo) continue;
     soloSlotIds.add(slot.id);
-    if (slot.clusterKey) soloClusterKeys.add(slot.clusterKey);
+    const focusedClusterKey = slot.clusterKey || slot.identityKey;
+    if (focusedClusterKey) soloClusterKeys.add(focusedClusterKey);
   }
 
   return {
@@ -51,8 +52,9 @@ export function deriveSelectionState(slots = [], selected = null, selectedSlotId
   const clusterKeys = new Set();
 
   for (const slot of slots) {
-    if (!slot || !slotIds.has(slot.id) || !slot.clusterKey) continue;
-    clusterKeys.add(slot.clusterKey);
+    if (!slot || !slotIds.has(slot.id)) continue;
+    const selectedClusterKey = slot.clusterKey || slot.identityKey;
+    if (selectedClusterKey) clusterKeys.add(selectedClusterKey);
   }
 
   if (selected?.type === 'cluster' && selected.key) clusterKeys.add(selected.key);
