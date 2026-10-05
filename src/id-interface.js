@@ -84,7 +84,7 @@ export function createIdInterface({ store }) {
   let activeDropTarget = null;
   let suppressClickUntil = 0;
 
-  function clusterCapsuleMarkup(cluster, slot, { tray = false, selected = false } = {}) {
+  function clusterCapsuleMarkup(cluster, slot, { selected = false } = {}) {
     const color = slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
     const manual = Boolean(slot?.manual);
     const identityName = identityNameForCluster(slot, cluster?.key);
@@ -229,7 +229,7 @@ export function createIdInterface({ store }) {
           const slot = assignedSlotForCluster(snapshot, cluster.key);
           const selected = selectedClusterKey === cluster.key;
           const solo = visualState.soloClusterKeys.has(cluster.key);
-          return `<div class="${solo ? 'is-solo' : visualState.soloMode ? 'is-solo-muted' : ''}">${clusterCapsuleMarkup(cluster, slot, { tray: true, selected })}</div>`;
+          return `<div class="${solo ? 'is-solo' : visualState.soloMode ? 'is-solo-muted' : ''}">${clusterCapsuleMarkup(cluster, slot, { selected })}</div>`;
         }).join('')
       : '<div class="tray-empty">Waiting for live clusters…</div>';
 
