@@ -39,6 +39,7 @@ Additional behavior:
 ## Interaction
 
 - The 3D scene is the primary operator surface. Cluster picking, selection, drag and left-slot assignment must remain synchronized with the ID store.
+- Selection has one model everywhere: plain click selects one visible slot/assigned cluster; Shift+click is additive/toggle selection. An assigned cluster selection must also select its numeric slot. Every selected representation uses bold + glow consistently in the ID list, cluster tray and 3D view.
 - **ID color is identity-of-output:** all assigned cluster visuals must derive their color from `src/id-colors.js`. Never derive operator colors from cluster UUID/source ID. Unassigned clusters are always neutral gray.
 - In the left list, the ID number, Solo button and Manual button are fixed controls. Only the cluster capsule moves between slot wells.
 - Clicking the ID number toggles Enabled. The adjacent `S` toggles Solo. Keep both usable by mouse and touch.
@@ -49,8 +50,9 @@ Additional behavior:
 - A normal live cluster bounding box, center centroid, floor donut and look-at decoration are **selection-only**. Hidden decoration must not become visible again merely because a global visibility flag changes.
 - Manual takeover is a floor-raycast interaction. The operator proxy is ID-colored, sparse-point only, and connected by a dashed line from its floor centroid to the live source centroid. The live source becomes gray and does not display a bounding box while takeover is active.
 - A direct left-drag from a live assigned cluster is **temporary Manual**: release/cancel must always clear Manual and return the proxy smoothly to automatic tracking. Manual enabled explicitly with the fixed M button is persistent; while it is active, only the separate Manual proxy is draggable and the live source is read-only.
-- Manual takeover must be signaled by a subtle ID-colored pulse/frame around the entire slot row, not only the capsule or M button. Ending Manual takeover must visually converge the proxy back to the live cluster using a smooth easing curve; do not introduce a positional jump.
+- Manual takeover must be signaled by the same subtle pulse on the slot row and cluster capsule in both the ID list and bottom tray, including temporary Manual started by direct 3D drag. Ending Manual takeover must visually converge the proxy back to the live cluster using a smooth easing curve; do not introduce a positional jump.
 - Solo is a renderer-level focus override and must ignore Enabled/Disabled state for focus. A visible disabled Solo slot remains fully legible in both UI and 3D; Enabled/Disabled still controls allocation/output eligibility. Non-Solo clusters, point clouds, labels, vectors and manual proxies must dim together.
+- Solo is the only operator override state persisted locally. Persist visible Solo slot IDs only; deleted slots must never be restored as Solo. Do not write persistence on live tracking frames.
 - A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display a reserved identity name on a temporary operator override.
 - Keep the ViewCube behavior in sync with the Augmenta ThreeJS example. On the canvas, left pointer drag is reserved for cluster/Manual interaction, right-button drag pans, middle-button drag orbits, wheel zoom remains available, and one-finger touch must not accidentally orbit the camera. Camera framing must account for the left ID panel so the spatial content is centered in the unobscured viewport.
 - Use Pointer Events for direct manipulation and preserve touch scrolling/long-hold behavior where the UI needs both scrolling and dragging.
@@ -64,4 +66,4 @@ Before considering a change ready:
 2. Run all Node tests, especially `tests/id-store.test.mjs`.
 3. Build/test the pinned SDK when SDK-facing behavior changes.
 4. Assemble the Pages artifact and verify it contains no runtime CDN dependency.
-5. Manually qualify mouse/touch 3D selection, 3D→ID drag, capsule→ID drag/reassignment, bottom-tray right-click assignment, Enabled/Solo/Manual controls, all bulk actions, Strict/Non-strict overflow, Min/Max range changes, delete/restore, Lock & Learn, Manual ground takeover + smooth return, ViewCube perspective/ortho behavior, mobile layout and reconnect behavior.
+5. Manually qualify mouse/touch 3D selection, plain/Shift multi-selection, 3D→ID drag, capsule→ID drag/reassignment, Enabled/Solo/Manual controls, all bulk actions, Strict/Non-strict overflow, Min/Max range changes, delete/restore, Lock & Learn, Manual ground takeover + smooth return, ViewCube perspective/ortho behavior, mobile layout and reconnect behavior.
