@@ -77,7 +77,29 @@ function capsuleTitle(cluster) {
   return operatorClusterName(cluster);
 }
 
+export function describeClusterDropAction(snapshot, key, targetId, { insideIdPanel = false } = {}) {
+  const sourceSlot = assignedSlotForCluster(snapshot, key);
+  const targetSlot = Number.isInteger(Number(targetId))
+    ? snapshot.slots.find((slot) => slot.id === Number(targetId))
+    : null;
+
+  if (targetSlot) {
+    if (sourceSlot?.id === targetSlot.id) return `Keep ID ${targetSlot.id}?`;
+    if (targetSlot.clusterKey && targetSlot.clusterKey !== key) {
+      return snapshot.options.occupiedDropMode === 'swap'
+        ? `Swap with ID ${targetSlot.id}?`
+        : `Kick ID ${targetSlot.id}?`;
+    }
+    return `Assign to ID ${targetSlot.id}?`;
+  }
+
+  if (insideIdPanel) return 'No change?';
+  if (sourceSlot) return `Remove from ID ${sourceSlot.id}?`;
+  return 'Leave unassigned?';
+}
+
 export function createIdInterface({ store }) {
+  const idPanel = document.querySelector('.id-panel');
   const idList = document.querySelector('#id-list');
   const clusterTray = document.querySelector('#cluster-tray');
   const liveCount = document.querySelector('#live-count');
@@ -616,10 +638,13 @@ export function createIdInterface({ store }) {
 
     const key = handle.dataset.dragKey;
     if (!key) return;
+    const snapshot = store.snapshot();
+    const sourceSlot = assignedSlotForCluster(snapshot, key);
     const isTouch = event.pointerType === 'touch';
     dragState = {
       pointerId: event.pointerId,
       key,
+      sourceSlotId: sourceSlot?.id ?? null,
       startX: event.clientX,
       startY: event.clientY,
       lastX: event.clientX,
@@ -687,7 +712,10 @@ export function createIdInterface({ store }) {
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
     ghost.style.setProperty('--capsule-color', slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS);
-    ghost.textContent = capsuleTitle(cluster);
+    ghost.innerHTML = `
+      <strong class="drag-ghost-cluster">${escapeHtml(capsuleTitle(cluster))}</strong>
+      <span class="drag-ghost-action"></span>
+    `;
     document.body.appendChild(ghost);
     dragState.ghost = ghost;
     moveDragAt(clientX, clientY);
@@ -707,12 +735,32 @@ export function createIdInterface({ store }) {
     activeDropTarget?.element?.classList.add('drop-target');
   }
 
+  function pointInsideIdPanel(clientX, clientY) {
+    const rect = idPanel.getBoundingClientRect();
+    return clientX >= rect.left
+      && clientX <= rect.right
+      && clientY >= rect.top
+      && clientY <= rect.bottom;
+  }
+
+  function updateDragGhostAction(clientX, clientY, target) {
+    if (!dragState?.ghost) return;
+    const snapshot = store.snapshot();
+    const label = describeClusterDropAction(snapshot, dragState.key, target?.id ?? null, {
+      insideIdPanel: pointInsideIdPanel(clientX, clientY)
+    });
+    const action = dragState.ghost.querySelector('.drag-ghost-action');
+    if (action) action.textContent = label;
+  }
+
   function moveDragAt(clientX, clientY) {
     if (!dragState?.ghost) return;
     dragState.ghost.style.transform = `translate3d(${clientX + 12}px, ${clientY + 12}px, 0)`;
     dragState.ghost.hidden = true;
-    setActiveDropTarget(findIdDropTarget(clientX, clientY));
+    const target = findIdDropTarget(clientX, clientY);
+    setActiveDropTarget(target);
     dragState.ghost.hidden = false;
+    updateDragGhostAction(clientX, clientY, target);
   }
 
   function finishDrag(event) {
@@ -730,7 +778,14 @@ export function createIdInterface({ store }) {
 
     suppressClickUntil = performance.now() + 260;
     event.preventDefault();
-    if (target) assignDraggedCluster(current.key, target.id);
+    if (target) {
+      assignDraggedCluster(current.key, target.id);
+      return;
+    }
+
+    if (!pointInsideIdPanel(event.clientX, event.clientY) && current.sourceSlotId !== null) {
+      store.releaseId(current.sourceSlotId);
+    }
   }
 
   function assignDraggedCluster(
@@ -805,7 +860,6 @@ export function createIdInterface({ store }) {
         store.setManual(sourceSlot.id, true);
         if (floorPoint) store.setManualPosition(sourceSlot.id, floorPoint);
       }
-      setActiveDropTarget(findIdDropTarget(event.clientX, event.clientY));
       return;
     }
 
@@ -823,8 +877,6 @@ export function createIdInterface({ store }) {
       return;
     }
 
-    setActiveDropTarget(findIdDropTarget(event.clientX, event.clientY));
-
     if (event.phase === 'move') {
       if (sceneDrag.sourceId && sceneDrag.lastFloorPoint) {
         store.setManualPosition(sceneDrag.sourceId, sceneDrag.lastFloorPoint);
@@ -833,23 +885,15 @@ export function createIdInterface({ store }) {
     }
 
     if (event.phase === 'end' || event.phase === 'cancel') {
-      const target = activeDropTarget;
       const sourceId = sceneDrag.sourceId;
-      const lastFloorPoint = sceneDrag.lastFloorPoint;
       setActiveDropTarget(null);
       document.body.classList.remove('dragging-cluster');
 
-      if (event.phase === 'end' && target) {
-        assignDraggedCluster(key, target.id, {
-          floorPoint: lastFloorPoint,
-          preserveManual: false
-        });
-      } else if (sourceId) {
-        store.setManual(sourceId, false);
-      }
+      if (sourceId) store.setManual(sourceId, false);
 
-      // Direct manipulation of a live cluster is momentary. Releasing it
-      // always returns to automatic tracking, regardless of where it ended.
+      // Direct manipulation in the 3D view is only a temporary Manual move.
+      // ID assignment is intentionally limited to drags from the ID panel or
+      // the bottom cluster tray; dropping a 3D cluster over the panel does nothing.
       const after = store.snapshot();
       const assigned = assignedSlotForCluster(after, key);
       if (assigned?.manual) store.setManual(assigned.id, false);
