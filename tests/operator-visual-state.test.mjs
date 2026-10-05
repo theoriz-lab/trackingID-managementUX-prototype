@@ -27,12 +27,15 @@ test('an enabled manual solo slot without a cluster still activates solo mode', 
   assert.equal(state.soloClusterKeys.size, 0);
 });
 
-test('disabled solo slots do not activate solo mode', () => {
+test('Solo overrides disabled state for operator focus', () => {
   const state = deriveOperatorVisualState([
-    { id: 1, enabled: false, solo: true, clusterKey: 'alice' }
+    { id: 1, enabled: false, solo: true, clusterKey: 'alice' },
+    { id: 2, enabled: true, solo: false, clusterKey: 'bob' }
   ]);
 
-  assert.equal(state.soloMode, false);
+  assert.equal(state.soloMode, true);
+  assert.deepEqual([...state.soloSlotIds], [1]);
+  assert.deepEqual([...state.soloClusterKeys], ['alice']);
 });
 
 test('identity names do not follow a temporary operator override', () => {
