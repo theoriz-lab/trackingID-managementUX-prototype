@@ -186,11 +186,20 @@ export function createIdStore({
   function tryAutoAssign(cluster) {
     if (!cluster?.visible) return false;
     const key = cluster.key;
-    if (heldClusters.has(key) || refusedClusters.has(key) || slotForCluster(key)) return false;
+    if (heldClusters.has(key) || refusedClusters.has(key)) return false;
 
+    // Identity Lock has priority over an ordinary current assignment. During
+    // an operator override the learned person may temporarily sit in another
+    // slot; as soon as the reserved ID becomes empty, move them back.
     const identitySlot = slotForIdentity(key);
-    const target = identitySlot ?? preferredSlotForCluster(cluster) ?? nextFreeSlot();
+    if (identitySlot && identitySlot.clusterKey !== key && !identitySlot.clusterKey) {
+      const result = assignClusterInternal(key, identitySlot);
+      return result.ok && result.moved;
+    }
 
+    if (slotForCluster(key)) return false;
+
+    const target = preferredSlotForCluster(cluster) ?? nextFreeSlot();
     if (target) {
       const result = assignClusterInternal(key, target);
       return result.ok && result.moved;
