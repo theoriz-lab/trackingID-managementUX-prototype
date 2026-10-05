@@ -9,8 +9,8 @@ import { idColorValue, UNASSIGNED_ID_COLOR_VALUE } from './id-colors.js';
 import {
   deriveOperatorVisualState,
   deriveSelectionState,
-  identityNameForCluster,
-  operatorLabelForCluster
+  operatorLabelForCluster,
+  previewLabelForCluster
 } from './operator-visual-state.js';
 
 const FLOOR_Y = 0;
@@ -1189,14 +1189,6 @@ export function createViewer(host) {
     raycaster.setFromCamera(pickPointer, camera);
     const hit = raycaster.ray.intersectPlane(floorPlane, floorHit);
     return hit ? [floorHit.x, FLOOR_Y, floorHit.z] : null;
-  }
-
-  function previewLabelForCluster(cluster, assignedId) {
-    if (assignedId === null || assignedId === undefined) {
-      return identityNameForCluster(cluster);
-    }
-    const identityName = identityNameForCluster(cluster);
-    return identityName ? `${assignedId} : ${identityName}` : String(assignedId);
   }
 
   function effectiveOperatorLabel(view, cluster) {
