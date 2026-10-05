@@ -126,7 +126,10 @@ function normalizeTrackedObjects(frame) {
       centroid: cluster.getCentroid(),
       size: cluster.getBoundingBoxSize(),
       preview: object.hasPointCloud()
-        ? samplePointPreview(object.getPointCloud().getPointsData())
+        ? samplePointPreview(object.getPointCloud().getPointsData(), 72, {
+            center: cluster.getCentroid(),
+            lookAt: cluster.getLookAt()
+          })
         : []
     }];
   });
