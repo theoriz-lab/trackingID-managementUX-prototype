@@ -4,7 +4,7 @@ export function deriveOperatorVisualState(slots = []) {
   const soloClusterKeys = new Set();
 
   for (const slot of slots) {
-    if (!slot?.visible) continue;
+    if (!slot || slot.visible === false) continue;
     if (slot.clusterKey) slotByCluster.set(slot.clusterKey, slot);
     if (!slot.enabled || !slot.solo) continue;
     soloSlotIds.add(slot.id);
