@@ -32,7 +32,7 @@ Additional behavior:
 - Strict mode must match Pleiades Assign Cluster IDs semantics: an overflow cluster is refused for its current tracking lifetime; Non-strict overflow stays eligible for a later freed ID.
 - Min/Max define the managed ID range. Shrinking the range removes slots outside it; expanding creates fresh slots for newly included IDs.
 - Deleted slots are hidden and disabled. Automatic allocation, Solo state and every bulk action must ignore hidden slots. Restoring a deleted slot must not silently re-enable it.
-- Bulk actions are distinct: Lock all active targets occupied enabled visible slots; Lock all targets every visible slot; Unlock all targets every visible slot; Enable/Disable all is one visible-slot toggle.
+- Bulk actions are distinct: Lock all active targets occupied enabled visible slots; Lock all targets every visible slot; Unlock all targets every visible slot. The output-state bulk control shows Enable all only when every visible slot is disabled; otherwise it shows Disable all. Disable all and Unlock all occupy the left column.
 - Manual takeover keeps background tracking associated with the ID.
 - `identityKey` is currently a cluster-key/UUID placeholder for UX testing, not a production ReID descriptor. Do not infer or claim true identity recognition in this prototype.
 
@@ -45,8 +45,8 @@ Additional behavior:
 - Cluster capsules in the left list and bottom tray must keep a lightweight point-cloud silhouette preview and live centroid coordinates.
 - A normal live cluster bounding box, center centroid, floor donut and look-at decoration are **selection-only**. Hidden decoration must not become visible again merely because a global visibility flag changes.
 - Manual takeover is a floor-raycast interaction. The operator proxy is ID-colored, sparse-point only, and connected by a dashed line from its floor centroid to the live source centroid. The live source becomes gray and does not display a bounding box while takeover is active.
-- Ending Manual takeover must visually converge the proxy back to the live cluster using a smooth easing curve; do not introduce a positional jump.
-- Solo is a renderer-level focus state. Non-Solo clusters, point clouds, labels, vectors and manual proxies must all dim together while every active Solo target remains legible.
+- Manual takeover must be signaled by a subtle ID-colored pulse/frame around the entire slot row, not only the capsule or M button. Ending Manual takeover must visually converge the proxy back to the live cluster using a smooth easing curve; do not introduce a positional jump.
+- Solo is a renderer-level focus override and must ignore Enabled/Disabled state for focus. A visible disabled Solo slot remains fully legible in both UI and 3D; Enabled/Disabled still controls allocation/output eligibility. Non-Solo clusters, point clouds, labels, vectors and manual proxies must dim together.
 - A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display a reserved identity name on a temporary operator override.
 - Orbit is controlled by the ViewCube copied from the Augmenta ThreeJS example. Keep its behavior in sync with that source implementation; only prototype-specific visual alpha/glow adaptations belong here. Keep direct OrbitControls rotate/pan disabled so cluster dragging cannot accidentally orbit the scene. Wheel/touch zoom may remain available unless explicitly changed.
 - Bottom-tray right-click reassignment is an accelerator; ordinary capsule drag/drop remains available for touch-capable workflows.
