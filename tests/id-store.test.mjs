@@ -690,3 +690,49 @@ test('Lock all is idempotent for already locked pending slots', () => {
   assert.equal(store.lockAll(), false);
   assert.deepEqual(reasons, []);
 });
+
+
+test('Swap mode uses Kick semantics when the incoming cluster is unassigned', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
+  store.releaseId(2);
+
+  const result = store.assignClusterToId('waiting', 1);
+  const state = store.snapshot();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.displacedKey, 'occupied');
+  assert.equal(result.displacedTo, 2);
+  assert.equal(state.slots[0].clusterKey, 'waiting');
+  assert.equal(state.slots[1].clusterKey, 'occupied');
+  assert.equal(state.slots[2].clusterKey, null);
+});
+
+test('Swap mode unassigned fallback releases the displaced cluster only when no free ID exists', () => {
+  const store = createIdStore({ count: 1, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 9)]);
+
+  const result = store.assignClusterToId('waiting', 1);
+  let state = store.snapshot();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.displacedTo, null);
+  assert.equal(state.slots[0].clusterKey, 'waiting');
+
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 9)]);
+  state = store.snapshot();
+  assert.equal(state.slots.some((slot) => slot.clusterKey === 'occupied'), false);
+});
+
+test('assigned Swap still exchanges IDs rather than kicking', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+
+  const result = store.assignClusterToId('a', 2);
+  const state = store.snapshot();
+
+  assert.equal(result.displacedTo, 1);
+  assert.equal(state.slots[0].clusterKey, 'b');
+  assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(state.slots[2].clusterKey, null);
+});

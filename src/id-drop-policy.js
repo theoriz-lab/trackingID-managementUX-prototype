@@ -35,7 +35,7 @@ export function describeClusterDropAction(
   if (targetSlot) {
     if (sourceSlot?.id === targetSlot.id) return `Keep ID ${targetSlot.id}?`;
     if (targetSlot.clusterKey && targetSlot.clusterKey !== key) {
-      return snapshot.options.occupiedDropMode === 'swap'
+      return snapshot.options.occupiedDropMode === 'swap' && sourceSlot
         ? `Swap with ID ${targetSlot.id}?`
         : `Kick ID ${targetSlot.id}?`;
     }
@@ -70,11 +70,11 @@ export function resolveClusterDropPreview(snapshot, key, targetId) {
     };
   }
 
-  if (snapshot.options.occupiedDropMode === 'swap') {
+  if (snapshot.options.occupiedDropMode === 'swap' && sourceSlot) {
     return {
-      sourceId: sourceSlot?.id ?? null,
+      sourceId: sourceSlot.id,
       targetId: targetSlot.id,
-      displacedTo: sourceSlot?.id ?? null,
+      displacedTo: sourceSlot.id,
       displaced: true
     };
   }
@@ -89,4 +89,23 @@ export function resolveClusterDropPreview(snapshot, key, targetId) {
     displacedTo: destination?.id ?? null,
     displaced: true
   };
+}
+
+
+export function resolveClusterDropAssignments(snapshot, key, targetId) {
+  const sourceSlot = assignedSlotForCluster(snapshot, key);
+  const targetSlot = snapshot.slots.find((slot) => slot.id === Number(targetId));
+  if (!targetSlot) return new Map();
+
+  const assignments = new Map();
+  assignments.set(key, targetSlot.id);
+
+  if (sourceSlot?.id === targetSlot.id) return assignments;
+
+  const displacedKey = targetSlot.clusterKey;
+  if (!displacedKey || displacedKey === key) return assignments;
+
+  const preview = resolveClusterDropPreview(snapshot, key, targetSlot.id);
+  assignments.set(displacedKey, preview.displacedTo);
+  return assignments;
 }

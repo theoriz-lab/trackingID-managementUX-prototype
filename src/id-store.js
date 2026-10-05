@@ -306,27 +306,21 @@ export function createIdStore({
 
     let displacedTo = null;
     if (displacedKey && displacedKey !== clusterKey) {
-      if (operator && options.occupiedDropMode === 'swap') {
-        if (sourceSlot) {
-          sourceSlot.clusterKey = displacedKey;
-          sourceSlot.manual = displacedWasManual;
-          if (displacedWasManual && displacedManualPosition) {
-            sourceSlot.manualPosition = [...displacedManualPosition];
-          }
-          heldClusters.delete(displacedKey);
-          refusedClusters.delete(displacedKey);
-          if (displacedCluster?.identityLocked) reserveClusterIdentity(sourceSlot, displacedKey);
-          else learnIdentityIfNeeded(sourceSlot, displacedKey);
-          displacedTo = sourceSlot.id;
-        } else {
-          // There is no source ID to swap back into. Treat the displaced
-          // cluster as explicitly released until it leaves tracking.
-          heldClusters.add(displacedKey);
-          refusedClusters.delete(displacedKey);
+      if (operator && options.occupiedDropMode === 'swap' && sourceSlot) {
+        sourceSlot.clusterKey = displacedKey;
+        sourceSlot.manual = displacedWasManual;
+        if (displacedWasManual && displacedManualPosition) {
+          sourceSlot.manualPosition = [...displacedManualPosition];
         }
+        heldClusters.delete(displacedKey);
+        refusedClusters.delete(displacedKey);
+        if (displacedCluster?.identityLocked) reserveClusterIdentity(sourceSlot, displacedKey);
+        else learnIdentityIfNeeded(sourceSlot, displacedKey);
+        displacedTo = sourceSlot.id;
       } else {
-        // Kick must not silently collapse into a swap by using the ID that
-        // the dragged cluster just vacated. Look for another eligible free ID.
+        // Kick is also the contextual fallback for an unassigned incoming
+        // cluster in Swap mode: without a source ID there is nothing to swap.
+        // Never use the ID that an assigned dragged cluster just vacated.
         const excludedIds = new Set([targetSlot.id]);
         if (sourceSlot) excludedIds.add(sourceSlot.id);
         const free = nextFreeSlot(excludedIds);

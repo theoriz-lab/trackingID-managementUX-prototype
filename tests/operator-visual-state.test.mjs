@@ -6,6 +6,7 @@ import {
   identityNameForCluster,
   operatorClusterName,
   operatorLabelForCluster,
+  previewLabelForCluster,
   slotReservesClusterIdentity
 } from '../src/operator-visual-state.js';
 
@@ -169,4 +170,18 @@ test('Solo focus follows a reserved identity while the live cluster is missing',
   assert.equal(state.soloMode, true);
   assert.deepEqual([...state.soloSlotIds], [3]);
   assert.deepEqual([...state.soloClusterKeys], ['pancake']);
+});
+
+
+test('prospective 3D labels use the target ID and preserve locked identity names', () => {
+  assert.equal(previewLabelForCluster({ label: 'A', identityLocked: false }, 5), '5');
+  assert.equal(
+    previewLabelForCluster({ label: 'A', identityLocked: true, identityName: 'Pancake' }, 5),
+    '5 : Pancake'
+  );
+  assert.equal(
+    previewLabelForCluster({ label: 'A', identityLocked: true, identityName: 'Pancake' }, null),
+    'Pancake'
+  );
+  assert.equal(previewLabelForCluster({ label: 'A', identityLocked: false }, null), '');
 });

@@ -88,3 +88,8 @@ node --test tests/*.test.mjs
 ```
 
 The GitHub Pages build validates the SDK, JavaScript syntax and tests before assembling a self-contained deployment.
+
+
+### Drag/drop preview behavior
+
+The prospective ID result is previewed in both the ID panel and the 3D labels before release. Swap previews exchange the two prospective IDs; Kick previews move the displaced cluster to the next eligible free ID, or to unassigned when none exists. In Swap mode, dragging an already-unassigned cluster onto an occupied ID falls back to Kick semantics because there is no source ID to exchange.

@@ -9,7 +9,8 @@ import { idColorValue, UNASSIGNED_ID_COLOR_VALUE } from './id-colors.js';
 import {
   deriveOperatorVisualState,
   deriveSelectionState,
-  operatorLabelForCluster
+  operatorLabelForCluster,
+  previewLabelForCluster
 } from './operator-visual-state.js';
 
 const FLOOR_Y = 0;
@@ -153,6 +154,9 @@ export function createViewer(host) {
   let clusterDragHandler;
   let clusterContextHandler;
   let selectedClusterKeys = new Set();
+  let operatorClusters = new Map();
+  let operatorSlotsById = new Map();
+  let dropPreviewAssignments = null;
   let soloMode = false;
   let soloSlotIds = new Set();
   let soloClusterKeys = new Set();
@@ -905,6 +909,8 @@ export function createViewer(host) {
       labelColor: color.clone(),
       labelColorHex: color.getHex(),
       labelSelected: false,
+      labelPreviewActive: false,
+      labelPreviewStartedAt: 0,
       sourceId: id,
       uuid: '',
       operatorStateReady: false,
@@ -921,8 +927,9 @@ export function createViewer(host) {
   function updateLabel(view, id, uuid) {
   view.sourceId = id;
   view.uuid = uuid || '';
+  const cluster = operatorClusters.get(view.key);
   const labelText = view.operatorStateReady
-    ? view.operatorLabelText
+    ? effectiveOperatorLabel(view, cluster)
     : id !== undefined ? String(id) : uuid ? uuid.slice(0, 8) : '';
   if (!labelText) {
     view.label.visible = false;
@@ -1184,6 +1191,54 @@ export function createViewer(host) {
     return hit ? [floorHit.x, FLOOR_Y, floorHit.z] : null;
   }
 
+  function effectiveOperatorLabel(view, cluster) {
+    if (dropPreviewAssignments?.has(view.key)) {
+      return previewLabelForCluster(cluster, dropPreviewAssignments.get(view.key));
+    }
+    return view.operatorLabelText;
+  }
+
+  function previewLabelColor(view) {
+    if (!dropPreviewAssignments?.has(view.key)) return view.labelColor;
+    const assignedId = dropPreviewAssignments.get(view.key);
+    if (assignedId === null || assignedId === undefined) return UNASSIGNED_COLOR;
+    const slot = operatorSlotsById.get(assignedId);
+    return slot?.enabled
+      ? new THREE.Color(idColorValue(assignedId))
+      : UNASSIGNED_COLOR;
+  }
+
+  function applyDropPreviewToLabels() {
+    const now = performance.now();
+    for (const view of views.values()) {
+      const cluster = operatorClusters.get(view.key);
+      const nextLabel = effectiveOperatorLabel(view, cluster);
+      const previewed = Boolean(dropPreviewAssignments?.has(view.key));
+      const nextColor = previewLabelColor(view);
+      const labelChanged = view.labelText !== nextLabel;
+      const colorChanged = view.labelColorHex !== nextColor.getHex();
+      if (labelChanged || colorChanged) {
+        replaceLabelTexture(view.label, nextLabel, nextColor, view.labelSelected);
+        view.labelText = nextLabel;
+        view.labelColorHex = nextColor.getHex();
+        if (previewed) view.labelPreviewStartedAt = now;
+      }
+      view.labelPreviewActive = previewed;
+      if (!previewed) {
+        view.labelPreviewStartedAt = 0;
+        updateLabelScale(view.label, nextLabel);
+      }
+      view.label.visible = Boolean(nextLabel);
+    }
+  }
+
+  function setDropPreviewAssignments(assignments) {
+    dropPreviewAssignments = assignments instanceof Map && assignments.size
+      ? new Map(assignments)
+      : null;
+    applyDropPreviewToLabels();
+  }
+
   function setOperatorState(snapshot) {
     const slots = snapshot?.slots ?? [];
     const clusters = snapshot?.clusters ?? [];
@@ -1200,6 +1255,8 @@ export function createViewer(host) {
     selectedClusterKeys = selection.clusterKeys;
 
     const clusterByKey = new Map(clusters.map((cluster) => [cluster.key, cluster]));
+    operatorClusters = clusterByKey;
+    operatorSlotsById = new Map(slots.map((slot) => [slot.id, slot]));
 
     for (const view of views.values()) {
       const slot = slotByCluster.get(view.key);
@@ -1235,6 +1292,7 @@ export function createViewer(host) {
       updateLabel(view, view.sourceId, view.uuid);
     }
 
+    if (dropPreviewAssignments) applyDropPreviewToLabels();
     syncManualViews(slots, clusters);
     refreshInteractionStyles();
   }
@@ -1868,7 +1926,16 @@ export function createViewer(host) {
 
   renderer.setAnimationLoop(() => {
     controls.update();
-    zoneRenderer.animate(performance.now());
+    const now = performance.now();
+    zoneRenderer.animate(now);
+    for (const view of views.values()) {
+      if (!view.labelPreviewActive || !view.labelPreviewStartedAt) continue;
+      const t = Math.min((now - view.labelPreviewStartedAt) / 180, 1);
+      const pulse = 0.86 + 0.14 * (1 - Math.pow(1 - t, 3));
+      const baseY = String(view.labelText).includes('\n') ? 0.36 : 0.31;
+      view.label.scale.set(1.0 * pulse, baseY * pulse, 1);
+      if (t >= 1) view.labelPreviewStartedAt = 0;
+    }
     renderer.render(scene, camera);
   });
 
@@ -1896,7 +1963,8 @@ export function createViewer(host) {
     setClusterSelectionHandler,
     setClusterDragHandler,
     setClusterContextHandler,
-    setOperatorState
+    setOperatorState,
+    setDropPreviewAssignments
   };
 }
 
