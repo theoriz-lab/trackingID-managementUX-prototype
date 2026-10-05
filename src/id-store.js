@@ -141,7 +141,6 @@ export function createIdStore({
   function slotForIdentity(key) {
     return slots.find(
       (slot) => slot.visible
-        && slot.enabled
         && slot.locked
         && slot.identityKey === key
     );
@@ -553,12 +552,11 @@ export function createIdStore({
     const slot = getSlot(id);
     if (!slot?.visible) return false;
 
+    clearSlotReservation(slot);
     slot.visible = false;
     slot.enabled = false;
     slot.solo = false;
     slot.manual = false;
-    slot.locked = false;
-    slot.pendingLearn = false;
     slot.clusterKey = null;
 
     selectedSlotIds.delete(slot.id);
@@ -671,17 +669,9 @@ export function createIdStore({
   function unlockAll() {
     let changed = false;
 
-    for (const cluster of clusters.values()) {
-      if (!cluster.identityLocked) continue;
-      cluster.identityLocked = false;
-      cluster.identityName = '';
-      changed = true;
-    }
-
     for (const slot of visibleSlots()) {
       if (!slot.locked && !slot.pendingLearn && !slot.identityKey) continue;
-      clearSlotReservation(slot);
-      changed = true;
+      changed = clearSlotReservation(slot, { unlockIdentity: true }) || changed;
     }
 
     for (const [key, cluster] of [...clusters]) {
