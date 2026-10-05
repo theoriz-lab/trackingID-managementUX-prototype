@@ -136,9 +136,15 @@ export function createIdInterface({ store }) {
 
     const operatorSlots = snapshot.slots.filter((slot) => slot.visible);
     const visualState = deriveOperatorVisualState(operatorSlots);
+    const selectedClusterKey = snapshot.selected?.type === 'cluster'
+      ? snapshot.selected.key
+      : snapshot.selected?.type === 'id'
+        ? snapshot.slots.find((slot) => slot.id === snapshot.selected.id)?.clusterKey ?? null
+        : null;
     idList.classList.toggle('solo-mode', visualState.soloMode);
     idList.classList.toggle('deletion-enabled', snapshot.options.allowDelete);
     clusterTray.classList.toggle('solo-mode', visualState.soloMode);
+    clusterTray.classList.toggle('has-selection', Boolean(selectedClusterKey));
 
     idList.innerHTML = operatorSlots.map((slot) => {
       const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
@@ -216,7 +222,7 @@ export function createIdInterface({ store }) {
     clusterTray.innerHTML = visibleClusters.length
       ? visibleClusters.map((cluster) => {
           const slot = assignedSlotForCluster(snapshot, cluster.key);
-          const selected = snapshot.selected?.type === 'cluster' && snapshot.selected.key === cluster.key;
+          const selected = selectedClusterKey === cluster.key;
           const solo = visualState.soloClusterKeys.has(cluster.key);
           return `<div class="${solo ? 'is-solo' : visualState.soloMode ? 'is-solo-muted' : ''}">${clusterCapsuleMarkup(cluster, slot, { tray: true, selected })}</div>`;
         }).join('')
@@ -609,18 +615,29 @@ export function createIdInterface({ store }) {
     if (target) assignDraggedCluster(current.key, target.id);
   }
 
-  function assignDraggedCluster(key, targetId, floorPoint = null) {
+  function assignDraggedCluster(
+    key,
+    targetId,
+    { floorPoint = null, preserveManual = true } = {}
+  ) {
     const before = store.snapshot();
     const sourceSlot = assignedSlotForCluster(before, key);
     const cluster = before.clusters.find((candidate) => candidate.key === key);
-    const manualPoint = floorPoint ?? (cluster ? [cluster.centroid[0], 0, cluster.centroid[2]] : null);
+    const wasManual = Boolean(sourceSlot?.manual);
+    const manualPoint = floorPoint
+      ?? sourceSlot?.manualPosition
+      ?? (cluster ? [cluster.centroid[0], 0, cluster.centroid[2]] : null);
 
-    if (sourceSlot?.manual && sourceSlot.id !== targetId) store.setManual(sourceSlot.id, false);
     const result = store.assignClusterToId(key, targetId);
     if (!result.ok) return false;
 
-    store.setManual(targetId, true);
-    if (manualPoint) store.setManualPosition(targetId, manualPoint);
+    if (wasManual && sourceSlot?.id !== targetId) store.setManual(sourceSlot.id, false);
+    if (wasManual && preserveManual) {
+      store.setManual(targetId, true);
+      if (manualPoint) store.setManualPosition(targetId, manualPoint);
+    } else if (wasManual && sourceSlot?.id === targetId) {
+      store.setManual(targetId, false);
+    }
     return true;
   }
 
@@ -628,13 +645,41 @@ export function createIdInterface({ store }) {
     const key = event?.key;
     if (!key) return;
 
+    if (event.phase === 'start' && event.kind === 'manual') {
+      const snapshot = store.snapshot();
+      const slot = snapshot.slots.find((candidate) => candidate.id === event.id);
+      if (!slot?.manual || slot.clusterKey !== key) return;
+
+      sceneDrag = {
+        kind: 'manual',
+        key,
+        sourceId: slot.id,
+        lastFloorPoint: event.floorPoint ?? slot.manualPosition
+      };
+      document.body.classList.add('dragging-cluster');
+      store.selectCluster(key);
+      if (sceneDrag.lastFloorPoint) store.setManualPosition(slot.id, sceneDrag.lastFloorPoint);
+      return;
+    }
+
     if (event.phase === 'start') {
       const snapshot = store.snapshot();
       const cluster = snapshot.clusters.find((candidate) => candidate.key === key);
       const sourceSlot = assignedSlotForCluster(snapshot, key);
-      const floorPoint = event.floorPoint ?? (cluster ? [cluster.centroid[0], 0, cluster.centroid[2]] : null);
 
-      sceneDrag = { key, sourceId: sourceSlot?.id ?? null, lastFloorPoint: floorPoint };
+      // Once Manual was explicitly enabled from the ID panel, the live tracked
+      // source remains read-only. The separate manual proxy is the draggable one.
+      if (sourceSlot?.manual) return;
+
+      const floorPoint = event.floorPoint
+        ?? (cluster ? [cluster.centroid[0], 0, cluster.centroid[2]] : null);
+
+      sceneDrag = {
+        kind: 'temporary',
+        key,
+        sourceId: sourceSlot?.id ?? null,
+        lastFloorPoint: floorPoint
+      };
       document.body.classList.add('dragging-cluster');
       store.selectCluster(key);
 
@@ -648,6 +693,18 @@ export function createIdInterface({ store }) {
 
     if (!sceneDrag || sceneDrag.key !== key) return;
     if (event.floorPoint) sceneDrag.lastFloorPoint = event.floorPoint;
+
+    if (sceneDrag.kind === 'manual') {
+      if (event.phase === 'move' && sceneDrag.lastFloorPoint) {
+        store.setManualPosition(sceneDrag.sourceId, sceneDrag.lastFloorPoint);
+      }
+      if (event.phase === 'end' || event.phase === 'cancel') {
+        document.body.classList.remove('dragging-cluster');
+        sceneDrag = null;
+      }
+      return;
+    }
+
     setActiveDropTarget(findIdDropTarget(event.clientX, event.clientY));
 
     if (event.phase === 'move') {
@@ -659,12 +716,25 @@ export function createIdInterface({ store }) {
 
     if (event.phase === 'end' || event.phase === 'cancel') {
       const target = activeDropTarget;
+      const sourceId = sceneDrag.sourceId;
+      const lastFloorPoint = sceneDrag.lastFloorPoint;
       setActiveDropTarget(null);
       document.body.classList.remove('dragging-cluster');
 
       if (event.phase === 'end' && target) {
-        assignDraggedCluster(key, target.id, sceneDrag.lastFloorPoint);
+        assignDraggedCluster(key, target.id, {
+          floorPoint: lastFloorPoint,
+          preserveManual: false
+        });
+      } else if (sourceId) {
+        store.setManual(sourceId, false);
       }
+
+      // Direct manipulation of a live cluster is momentary. Releasing it
+      // always returns to automatic tracking, regardless of where it ended.
+      const after = store.snapshot();
+      const assigned = assignedSlotForCluster(after, key);
+      if (assigned?.manual) store.setManual(assigned.id, false);
       sceneDrag = null;
     }
   }
