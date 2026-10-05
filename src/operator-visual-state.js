@@ -30,8 +30,5 @@ export function identityNameForCluster(slot, clusterKey) {
 export function operatorLabelForCluster(slot, clusterKey) {
   if (!slot) return '';
   const identityName = identityNameForCluster(slot, clusterKey);
-  return identityName
-    ? `${identityName}
-ID ${slot.id}`
-    : `ID ${slot.id}`;
+  return identityName ? `${slot.id} : ${identityName}` : String(slot.id);
 }
