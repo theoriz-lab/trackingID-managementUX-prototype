@@ -60,7 +60,7 @@ const idStore = createIdStore({
   onChange: (snapshot, reason) => {
     if (SOLO_PERSIST_REASONS.has(reason)) saveSoloIds(snapshot);
     viewer.setOperatorState(snapshot);
-    idInterface?.render();
+    if (reason !== 'manual-position') idInterface?.render();
   }
 });
 idInterface = createIdInterface({ store: idStore });
