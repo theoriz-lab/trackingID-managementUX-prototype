@@ -6,7 +6,10 @@ export function deriveOperatorVisualState(slots = []) {
   for (const slot of slots) {
     if (!slot || slot.visible === false) continue;
     if (slot.clusterKey) slotByCluster.set(slot.clusterKey, slot);
-    if (!slot.enabled || !slot.solo) continue;
+
+    // Solo is a presentation override, not an output/allocation state.
+    // A visible slot remains a Solo focus target even while its ID is disabled.
+    if (!slot.solo) continue;
     soloSlotIds.add(slot.id);
     if (slot.clusterKey) soloClusterKeys.add(slot.clusterKey);
   }
