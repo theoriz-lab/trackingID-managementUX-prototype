@@ -63,7 +63,10 @@ const idStore = createIdStore({
     if (reason !== 'manual-position') idInterface?.render();
   }
 });
-idInterface = createIdInterface({ store: idStore });
+idInterface = createIdInterface({
+  store: idStore,
+  onDropPreview: (assignments) => viewer.setDropPreviewAssignments(assignments)
+});
 
 viewer.setClusterSelectionHandler((key) => {
   if (key) idStore.selectCluster(key);
