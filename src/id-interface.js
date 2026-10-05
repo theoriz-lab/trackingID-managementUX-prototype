@@ -85,13 +85,16 @@ export function createIdInterface({ store }) {
   let suppressClickUntil = 0;
 
   function clusterCapsuleMarkup(cluster, slot, { selected = false } = {}) {
-    const color = slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
+    const disabled = Boolean(slot && !slot.enabled);
+    const color = slot && slot.enabled ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
     const manual = Boolean(slot?.manual);
     const identityName = identityNameForCluster(slot, cluster?.key);
     const clusterLocked = Boolean(cluster?.lockRequested || slot?.locked);
     const classes = [
       'cluster-capsule',
       slot ? 'assigned' : 'unassigned',
+      disabled ? 'disabled' : '',
+      manual ? 'manual' : '',
       selected ? 'selected' : ''
     ].filter(Boolean).join(' ');
 
@@ -141,21 +144,22 @@ export function createIdInterface({ store }) {
 
     const operatorSlots = snapshot.slots.filter((slot) => slot.visible);
     const visualState = deriveOperatorVisualState(operatorSlots);
-    const selectedClusterKey = snapshot.selected?.type === 'cluster'
-      ? snapshot.selected.key
-      : snapshot.selected?.type === 'id'
-        ? snapshot.slots.find((slot) => slot.id === snapshot.selected.id)?.clusterKey ?? null
-        : null;
+    const selectedSlotIds = new Set(snapshot.selectedSlotIds ?? []);
+    const selectedClusterKeys = new Set(
+      operatorSlots
+        .filter((slot) => selectedSlotIds.has(slot.id) && slot.clusterKey)
+        .map((slot) => slot.clusterKey)
+    );
+    if (snapshot.selected?.type === 'cluster') selectedClusterKeys.add(snapshot.selected.key);
+
     idList.classList.toggle('solo-mode', visualState.soloMode);
     idList.classList.toggle('deletion-enabled', snapshot.options.allowDelete);
     clusterTray.classList.toggle('solo-mode', visualState.soloMode);
-    clusterTray.classList.toggle('has-selection', Boolean(selectedClusterKey));
+    clusterTray.classList.toggle('has-selection', selectedClusterKeys.size > 0);
 
     idList.innerHTML = operatorSlots.map((slot) => {
       const cluster = slot.clusterKey ? clusterByKey.get(slot.clusterKey) : null;
-      const selected = snapshot.selected?.type === 'id'
-        ? snapshot.selected.id === slot.id
-        : snapshot.selected?.type === 'cluster' && snapshot.selected.key === slot.clusterKey;
+      const selected = selectedSlotIds.has(slot.id);
       const warning = identityWarning(slot);
       const rowClasses = [
         'slot-row',
@@ -227,7 +231,7 @@ export function createIdInterface({ store }) {
     clusterTray.innerHTML = visibleClusters.length
       ? visibleClusters.map((cluster) => {
           const slot = assignedSlotForCluster(snapshot, cluster.key);
-          const selected = selectedClusterKey === cluster.key;
+          const selected = selectedClusterKeys.has(cluster.key);
           const solo = visualState.soloClusterKeys.has(cluster.key);
           return `<div class="${solo ? 'is-solo' : visualState.soloMode ? 'is-solo-muted' : ''}">${clusterCapsuleMarkup(cluster, slot, { selected })}</div>`;
         }).join('')
@@ -337,7 +341,7 @@ export function createIdInterface({ store }) {
     });
   }
 
-  function handleAction(target) {
+  function handleAction(target, event) {
     const action = target.dataset.action;
     if (!action) return false;
     const id = Number(target.dataset.id);
@@ -359,10 +363,12 @@ export function createIdInterface({ store }) {
       case 'set-all-enabled':
         store.setAllVisibleEnabled(target.dataset.enableAll === 'true');
         break;
-      case 'select-cluster': store.selectCluster(key); break;
+      case 'select-cluster':
+        store.selectCluster(key, { additive: Boolean(event?.shiftKey) });
+        break;
       case 'select-id':
         if (!target.closest?.('.cluster-capsule, .slot-lock-button, .slot-manual-button, .slot-delete-button')) {
-          store.selectId(id);
+          store.selectId(id, { additive: Boolean(event?.shiftKey) });
         }
         break;
       default: return false;
@@ -386,7 +392,7 @@ export function createIdInterface({ store }) {
     }
 
     const action = event.target.closest?.('[data-action]');
-    if (action && handleAction(action)) return;
+    if (action && handleAction(action, event)) return;
 
     if (event.target === warningButton || warningButton.contains(event.target)) {
       const id = Number(warningButton.dataset.firstWarningId);
