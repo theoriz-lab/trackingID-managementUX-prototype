@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createIdStore } from '../src/id-store.js';
-import { describeClusterDropAction } from '../src/id-interface.js';
+import { describeClusterDropAction, resolveClusterDropPreview } from '../src/id-interface.js';
 
 const cluster = (key, sourceId) => ({
   key,
@@ -48,4 +48,52 @@ test('unassigned cluster drag outside keeps it unassigned', () => {
   const state = store.snapshot();
 
   assert.equal(describeClusterDropAction(state, 'waiting', null, { insideIdPanel: false }), 'Leave unassigned?');
+});
+
+
+test('dragging from the cluster tray can never remove an existing ID', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  const state = store.snapshot();
+
+  assert.equal(
+    describeClusterDropAction(state, 'a', null, { insideIdPanel: false, sourceOrigin: 'tray' }),
+    'No change?'
+  );
+});
+
+test('Swap preview exchanges occupied source and target slots', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 2), {
+    sourceId: 1,
+    targetId: 2,
+    displacedTo: 1,
+    displaced: true
+  });
+});
+
+test('Kick preview sends the displaced cluster to another eligible free ID', () => {
+  const store = createIdStore({ count: 4, occupiedDropMode: 'kick' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 2), {
+    sourceId: 1,
+    targetId: 2,
+    displacedTo: 3,
+    displaced: true
+  });
+});
+
+test('Kick preview removes the displaced cluster when there is no other free ID', () => {
+  const store = createIdStore({ count: 2, occupiedDropMode: 'kick' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+
+  assert.deepEqual(resolveClusterDropPreview(store.snapshot(), 'a', 2), {
+    sourceId: 1,
+    targetId: 2,
+    displacedTo: null,
+    displaced: true
+  });
 });
