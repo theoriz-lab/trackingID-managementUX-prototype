@@ -451,3 +451,15 @@ test('deleted slots are removed from selection and panel actions still ignore th
   assert.equal(state.slots.find((slot) => slot.id === 1).enabled, false);
   assert.equal(state.slots.find((slot) => slot.id === 3).enabled, false);
 });
+
+
+test('Shift-deselecting the slot selected through its cluster clears that visual selection', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  store.selectCluster('a');
+  store.selectId(1, { additive: true });
+
+  const state = store.snapshot();
+  assert.deepEqual(state.selectedSlotIds, []);
+  assert.equal(state.selected, null);
+});
