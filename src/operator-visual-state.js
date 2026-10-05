@@ -73,3 +73,12 @@ export function deriveSelectionState(slots = [], selected = null, selectedSlotId
 
   return { slotIds, clusterKeys };
 }
+
+
+export function previewLabelForCluster(cluster, assignedId) {
+  if (assignedId === null || assignedId === undefined) {
+    return identityNameForCluster(cluster);
+  }
+  const identityName = identityNameForCluster(cluster);
+  return identityName ? `${assignedId} : ${identityName}` : String(assignedId);
+}
