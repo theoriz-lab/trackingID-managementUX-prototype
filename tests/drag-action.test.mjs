@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createIdStore } from '../src/id-store.js';
-import { describeClusterDropAction, resolveClusterDropPreview } from '../src/id-drop-policy.js';
+import {
+  describeClusterDropAction,
+  resolveClusterDropAssignments,
+  resolveClusterDropPreview
+} from '../src/id-drop-policy.js';
 
 const cluster = (key, sourceId) => ({
   key,
@@ -137,4 +141,26 @@ test('Swap preview recomputes each consecutive target without mutating state', (
   assert.equal(state.slots[0].clusterKey, 'a');
   assert.equal(state.slots[1].clusterKey, 'b');
   assert.equal(state.slots[2].clusterKey, 'c');
+});
+
+
+test('Swap mode contextually falls back to Kick for an unassigned incoming cluster', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('occupied', 1), cluster('waiting', 9)]);
+  const state = store.snapshot();
+
+  assert.equal(
+    describeClusterDropAction(state, 'waiting', 1, { insideIdPanel: true, sourceOrigin: 'tray' }),
+    'Kick ID 1?'
+  );
+  assert.deepEqual(resolveClusterDropPreview(state, 'waiting', 1), {
+    sourceId: null,
+    targetId: 1,
+    displacedTo: 2,
+    displaced: true
+  });
+  assert.deepEqual(
+    [...resolveClusterDropAssignments(state, 'waiting', 1).entries()],
+    [['waiting', 1], ['occupied', 2]]
+  );
 });
