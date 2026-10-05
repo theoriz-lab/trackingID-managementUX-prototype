@@ -88,11 +88,7 @@ export function createIdInterface({ store }) {
     const color = slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
     const manual = Boolean(slot?.manual);
     const identityName = identityNameForCluster(slot, cluster?.key);
-    const clusterLocked = Boolean(
-      cluster?.lockRequested
-      || slot?.locked
-      || (slot?.identityKey && slot.identityKey === cluster?.key)
-    );
+    const clusterLocked = Boolean(cluster?.lockRequested || slot?.locked);
     const classes = [
       'cluster-capsule',
       slot ? 'assigned' : 'unassigned',
@@ -394,7 +390,7 @@ export function createIdInterface({ store }) {
 
     if (event.target === warningButton || warningButton.contains(event.target)) {
       const id = Number(warningButton.dataset.firstWarningId);
-      if (id) {
+      if (Number.isInteger(id)) {
         store.selectId(id);
         document.querySelector(`[data-slot-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
       }
