@@ -297,11 +297,9 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   transition: background var(--motion-fast), border-color var(--motion-fast);
 }
 .id-panel-actions button:hover { background: rgba(49, 70, 99, .42); border-color: rgba(153,185,232,.40); }
-.id-panel-actions button.active {
-  border-color: rgba(34, 211, 238, .46);
-  color: #dffaff;
-  background: rgba(34, 211, 238, .10);
-  box-shadow: 0 0 16px rgba(34,211,238,.08);
+.id-panel-actions button:disabled {
+  opacity: .32;
+  cursor: default;
 }
 .lock-symbol {
   position: relative;
@@ -344,6 +342,7 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
 }
 .slot-row {
   --id-color: #8a909b;
+  position: relative;
   min-height: 56px;
   display: grid;
   grid-template-columns: 45px 34px minmax(0, 1fr) 34px;
@@ -417,7 +416,7 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   color: #f8fdff;
   border-color: color-mix(in srgb, var(--id-color) 78%, white 6%);
   background: color-mix(in srgb, var(--id-color) 19%, rgba(9,14,23,.70));
-  animation: manualButtonPulse 1.55s ease-in-out infinite;
+  box-shadow: inset 0 0 12px color-mix(in srgb, var(--id-color) 12%, transparent);
 }
 .slot-delete-button {
   color: rgba(255, 114, 130, .66);
@@ -429,21 +428,6 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   border-color: rgba(255, 95, 114, .42);
   background: rgba(255, 95, 114, .08);
 }
-@keyframes manualButtonPulse {
-  0%, 100% {
-    box-shadow:
-      inset 0 0 10px color-mix(in srgb, var(--id-color) 8%, transparent),
-      0 0 0 0 color-mix(in srgb, var(--id-color) 0%, transparent),
-      0 0 9px color-mix(in srgb, var(--id-color) 15%, transparent);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 16px color-mix(in srgb, var(--id-color) 16%, transparent),
-      0 0 0 3px color-mix(in srgb, var(--id-color) 12%, transparent),
-      0 0 23px color-mix(in srgb, var(--id-color) 42%, transparent);
-  }
-}
-
 .slot-well {
   position: relative;
   min-width: 0;
@@ -541,23 +525,6 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   background: rgba(17, 23, 32, .32);
   box-shadow: inset 3px 0 0 rgba(138,144,155,.62);
 }
-.cluster-capsule.manual {
-  animation: manualCapsulePulse 1.55s ease-in-out infinite;
-}
-@keyframes manualCapsulePulse {
-  0%, 100% {
-    box-shadow:
-      inset 3px 0 0 var(--capsule-color),
-      0 0 0 0 color-mix(in srgb, var(--capsule-color) 0%, transparent),
-      0 0 12px color-mix(in srgb, var(--capsule-color) 12%, transparent);
-  }
-  50% {
-    box-shadow:
-      inset 3px 0 0 var(--capsule-color),
-      0 0 0 5px color-mix(in srgb, var(--capsule-color) 14%, transparent),
-      0 0 25px color-mix(in srgb, var(--capsule-color) 34%, transparent);
-  }
-}
 .capsule-preview {
   width: 46px;
   height: 40px;
@@ -592,7 +559,48 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
 }
 .cluster-capsule.unassigned .capsule-assignment { color: #8794a7; }
 .id-list.solo-mode .slot-row:not(.solo) { opacity: .11; filter: saturate(.12) brightness(.55); }
-.id-list.solo-mode .slot-row.solo { opacity: 1; }
+.id-list.solo-mode .slot-row.solo {
+  opacity: 1;
+  filter: none;
+}
+.slot-row.disabled.solo .slot-id-button {
+  border-color: color-mix(in srgb, var(--id-color) 42%, rgba(161,186,225,.16));
+  background: color-mix(in srgb, var(--id-color) 10%, rgba(22,33,50,.48));
+  color: var(--id-color);
+  text-shadow: 0 0 13px color-mix(in srgb, var(--id-color) 58%, transparent);
+  box-shadow:
+    inset 0 0 15px color-mix(in srgb, var(--id-color) 8%, transparent),
+    0 0 13px color-mix(in srgb, var(--id-color) 12%, transparent);
+}
+
+.slot-row.manual::after {
+  content: "";
+  position: absolute;
+  z-index: 8;
+  inset: -2px;
+  border: 1px solid color-mix(in srgb, var(--id-color) 72%, rgba(255,255,255,.12));
+  border-radius: 11px;
+  box-shadow:
+    inset 0 0 14px color-mix(in srgb, var(--id-color) 7%, transparent),
+    0 0 12px color-mix(in srgb, var(--id-color) 20%, transparent);
+  pointer-events: none;
+  animation: manualRowPulse 1.55s ease-in-out infinite;
+}
+
+@keyframes manualRowPulse {
+  0%, 100% {
+    opacity: .58;
+    box-shadow:
+      inset 0 0 12px color-mix(in srgb, var(--id-color) 6%, transparent),
+      0 0 9px color-mix(in srgb, var(--id-color) 14%, transparent);
+  }
+  50% {
+    opacity: 1;
+    box-shadow:
+      inset 0 0 19px color-mix(in srgb, var(--id-color) 13%, transparent),
+      0 0 23px color-mix(in srgb, var(--id-color) 38%, transparent);
+  }
+}
 
 .cluster-dock {
   position: absolute;
@@ -1109,7 +1117,4 @@ body.dragging-cluster, body.dragging-cluster * { cursor: grabbing !important; }
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.17),
     0 0 18px rgba(34,211,238,.16);
-}
-.cluster-capsule.manual {
-  animation: manualCapsulePulse 1.55s ease-in-out infinite;
 }
