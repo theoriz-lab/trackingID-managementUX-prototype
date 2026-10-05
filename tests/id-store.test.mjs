@@ -208,8 +208,8 @@ test('a selected cluster is cleared when it leaves tracking', () => {
 });
 
 
-test('a displaced locked identity transfers its reservation with the cluster', () => {
-  const store = createIdStore({ count: 3 });
+test('Kick transfers a displaced locked identity to another free ID with its reservation', () => {
+  const store = createIdStore({ count: 3, occupiedDropMode: 'kick' });
   store.syncFrame([cluster('alice', 1), cluster('bob', 2)]);
   store.lockAndLearn(1);
   store.setClusterIdentityName('alice', 'Alice');
@@ -218,14 +218,16 @@ test('a displaced locked identity transfers its reservation with the cluster', (
   let state = store.snapshot();
   assert.equal(state.slots[0].clusterKey, 'bob');
   assert.equal(state.slots[0].locked, false);
-  assert.equal(state.slots[1].clusterKey, 'alice');
-  assert.equal(state.slots[1].locked, true);
-  assert.equal(state.slots[1].identityKey, 'alice');
+  assert.equal(state.slots[1].clusterKey, null);
+  assert.equal(state.slots[2].clusterKey, 'alice');
+  assert.equal(state.slots[2].locked, true);
+  assert.equal(state.slots[2].identityKey, 'alice');
 
   store.syncFrame([cluster('alice', 1)]);
   state = store.snapshot();
   assert.equal(state.slots[0].clusterKey, null);
-  assert.equal(state.slots[1].clusterKey, 'alice');
+  assert.equal(state.slots[2].clusterKey, 'alice');
+  assert.equal(state.slots[2].identityKey, 'alice');
   assert.equal(state.clusters.find((item) => item.key === 'alice').identityName, 'Alice');
 });
 
