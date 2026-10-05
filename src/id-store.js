@@ -674,7 +674,15 @@ export function createIdStore({
 
     if (selectedSlotIds.has(slot.id)) {
       selectedSlotIds.delete(slot.id);
-      if (selected?.type === 'id' && selected.id === slot.id) fallbackPrimarySelection();
+      const selectedClusterSlotId = selected?.type === 'cluster'
+        ? slotForCluster(selected.key)?.id
+        : null;
+      if (
+        (selected?.type === 'id' && selected.id === slot.id)
+        || selectedClusterSlotId === slot.id
+      ) {
+        fallbackPrimarySelection();
+      }
     } else {
       selectedSlotIds.add(slot.id);
       selected = { type: 'id', id: slot.id };
