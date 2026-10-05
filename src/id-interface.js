@@ -279,6 +279,46 @@ export function createIdInterface({ store }) {
     return snapshot.slots.find((slot) => slot.id === Number(id));
   }
 
+  function setSettingsOpen(open) {
+    const next = Boolean(open);
+    settingsMenu.hidden = !next;
+    settingsButton.setAttribute('aria-expanded', String(next));
+    settingsButton.classList.toggle('active', next);
+  }
+
+  function commitIdRange() {
+    const min = Number.parseInt(minIdInput.value, 10);
+    const max = Number.parseInt(maxIdInput.value, 10);
+    if (!Number.isInteger(min) || !Number.isInteger(max)) {
+      render();
+      return;
+    }
+    store.setIdRange(min, max);
+  }
+
+  settingsButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setSettingsOpen(settingsMenu.hidden);
+  });
+
+  strictModeInput.addEventListener('change', () => {
+    store.setStrictMode(strictModeInput.checked);
+  });
+
+  allowDeleteInput.addEventListener('change', () => {
+    store.setAllowDelete(allowDeleteInput.checked);
+  });
+
+  for (const input of [minIdInput, maxIdInput]) {
+    input.addEventListener('change', commitIdRange);
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      input.blur();
+      commitIdRange();
+    });
+  }
+
   function handleAction(target) {
     const action = target.dataset.action;
     if (!action) return false;
@@ -316,6 +356,13 @@ export function createIdInterface({ store }) {
 
   document.addEventListener('click', (event) => {
     if (!contextMenu.hidden && !event.target.closest?.('.cluster-context-menu')) closeContextMenu();
+    if (
+      !settingsMenu.hidden
+      && !event.target.closest?.('#id-settings-menu')
+      && !event.target.closest?.('#id-settings-button')
+    ) {
+      setSettingsOpen(false);
+    }
 
     if (performance.now() < suppressClickUntil && event.target.closest?.('[data-drag-type]')) {
       event.preventDefault();
@@ -338,6 +385,7 @@ export function createIdInterface({ store }) {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
       closeContextMenu();
+      setSettingsOpen(false);
       store.clearSelection();
       return;
     }
