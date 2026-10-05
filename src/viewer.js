@@ -6,7 +6,11 @@ import { createZoneRenderer } from './zones.js';
 import { collectZoneAddresses } from './zone-state.js';
 import { VIEW_TRANSITION, viewTransitionEase } from './view-transition.js';
 import { idColorValue, UNASSIGNED_ID_COLOR_VALUE } from './id-colors.js';
-import { deriveOperatorVisualState, operatorLabelForCluster } from './operator-visual-state.js';
+import {
+  deriveOperatorVisualState,
+  deriveSelectionState,
+  operatorLabelForCluster
+} from './operator-visual-state.js';
 
 const FLOOR_Y = 0;
 const PANEL_INSET_ANIMATION_DURATION_MS = 220;
@@ -1176,20 +1180,17 @@ export function createViewer(host) {
   function setOperatorState(snapshot) {
     const slots = snapshot?.slots ?? [];
     const clusters = snapshot?.clusters ?? [];
-    const selected = snapshot?.selected ?? null;
-    const selectedSlotIds = new Set(snapshot?.selectedSlotIds ?? []);
     const operatorVisualState = deriveOperatorVisualState(slots);
+    const selection = deriveSelectionState(
+      slots,
+      snapshot?.selected,
+      snapshot?.selectedSlotIds
+    );
     const slotByCluster = operatorVisualState.slotByCluster;
     soloMode = operatorVisualState.soloMode;
     soloSlotIds = operatorVisualState.soloSlotIds;
     soloClusterKeys = operatorVisualState.soloClusterKeys;
-
-    selectedClusterKeys = new Set(
-      slots
-        .filter((slot) => selectedSlotIds.has(slot.id) && slot.clusterKey)
-        .map((slot) => slot.clusterKey)
-    );
-    if (selected?.type === 'cluster') selectedClusterKeys.add(selected.key);
+    selectedClusterKeys = selection.clusterKeys;
 
     for (const view of views.values()) {
       const slot = slotByCluster.get(view.key);
