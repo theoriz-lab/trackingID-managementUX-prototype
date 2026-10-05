@@ -180,7 +180,7 @@ test('operator assignment keeps priority over identity lock while the override c
   assert.equal(state.slots[0].clusterKey, 'alice');
 });
 
-test('learning a different identity clears the stale identity name', () => {
+test('learning a different identity replaces the stale name with a funny identity', () => {
   const store = createIdStore({ count: 2 });
   store.syncFrame([cluster('alice', 1)]);
   store.setIdentityName(1, 'Alice');
@@ -193,7 +193,8 @@ test('learning a different identity clears the stale identity name', () => {
 
   const state = store.snapshot();
   assert.equal(state.slots[0].identityKey, 'bob');
-  assert.equal(state.slots[0].identityName, '');
+  assert.notEqual(state.slots[0].identityName, '');
+  assert.notEqual(state.slots[0].identityName, 'Alice');
 });
 
 
@@ -335,4 +336,52 @@ test('Lock all active only locks occupied enabled visible IDs', () => {
   assert.equal(state.slots.find((slot) => slot.id === 2).locked, false);
   assert.equal(state.slots.find((slot) => slot.id === 3).locked, false);
   assert.equal(state.slots.find((slot) => slot.id === 4).locked, false);
+});
+
+
+test('ID range can start at zero', () => {
+  const store = createIdStore({ count: 3, minId: 0 });
+  assert.deepEqual(store.snapshot().slots.map((slot) => slot.id), [0, 1, 2]);
+  store.setIdRange(0, 1);
+  assert.deepEqual(store.snapshot().slots.map((slot) => slot.id), [0, 1]);
+});
+
+test('operator can assign a cluster to a visible disabled slot', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  store.setEnabled(2, false);
+  const result = store.assignClusterToId('a', 2);
+  const state = store.snapshot();
+
+  assert.equal(result.ok, true);
+  assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(state.slots[1].enabled, false);
+});
+
+test('unassigned cluster lock request follows the cluster into its assigned slot', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 3)]);
+  assert.equal(store.toggleClusterLock('a'), true);
+  let state = store.snapshot();
+  assert.equal(state.clusters.find((item) => item.key === 'a').lockRequested, true);
+
+  store.assignClusterToId('a', 2);
+  state = store.snapshot();
+  assert.equal(state.slots[1].locked, true);
+  assert.equal(state.slots[1].identityKey, 'a');
+  assert.notEqual(state.slots[1].identityName, '');
+  assert.equal(state.clusters.find((item) => item.key === 'a').lockRequested, false);
+});
+
+test('clusters receive stable alphabetical operator labels', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('first', 1), cluster('second', 2)]);
+  let state = store.snapshot();
+  assert.equal(state.clusters.find((item) => item.key === 'first').label, 'A');
+  assert.equal(state.clusters.find((item) => item.key === 'second').label, 'B');
+
+  store.syncFrame([cluster('first', 1), cluster('second', 2)]);
+  state = store.snapshot();
+  assert.equal(state.clusters.find((item) => item.key === 'first').label, 'A');
+  assert.equal(state.clusters.find((item) => item.key === 'second').label, 'B');
 });
