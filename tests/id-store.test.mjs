@@ -98,11 +98,12 @@ test('solo state is independent from enable, lock and assignment', () => {
   const store = createIdStore({ count: 2 });
   store.syncFrame([cluster('a', 1)]);
   store.setSolo(1, true);
+  store.setEnabled(1, false);
   store.lockAndLearn(1);
   const state = store.snapshot();
 
   assert.equal(state.slots[0].solo, true);
-  assert.equal(state.slots[0].enabled, true);
+  assert.equal(state.slots[0].enabled, false);
   assert.equal(state.slots[0].locked, true);
   assert.equal(state.slots[0].clusterKey, 'a');
 });
