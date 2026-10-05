@@ -84,7 +84,7 @@ test('manual takeover keeps the ID occupied when tracking disappears', () => {
 test('lock all only locks active IDs so spare slots remain allocatable', () => {
   const store = createIdStore({ count: 4 });
   store.syncFrame([cluster('a', 1), cluster('b', 2)]);
-  store.lockAllVisible();
+  store.lockAllActive();
   const state = store.snapshot();
 
   assert.equal(state.slots[0].locked, true);
@@ -390,4 +390,64 @@ test('clusters receive stable alphabetical operator labels', () => {
   state = store.snapshot();
   assert.equal(state.clusters.find((item) => item.key === 'first').label, 'A');
   assert.equal(state.clusters.find((item) => item.key === 'second').label, 'B');
+});
+
+
+test('plain slot selection is exclusive while Shift selection is additive', () => {
+  const store = createIdStore({ count: 3 });
+  store.selectId(1);
+  let state = store.snapshot();
+  assert.deepEqual(state.selectedSlotIds, [1]);
+
+  store.selectId(2, { additive: true });
+  state = store.snapshot();
+  assert.deepEqual(state.selectedSlotIds.sort((a, b) => a - b), [1, 2]);
+
+  store.selectId(3);
+  state = store.snapshot();
+  assert.deepEqual(state.selectedSlotIds, [3]);
+});
+
+test('clicking an assigned cluster selects its slot number too', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  store.selectCluster('a');
+  const state = store.snapshot();
+
+  assert.deepEqual(state.selectedSlotIds, [1]);
+  assert.deepEqual(state.selected, { type: 'cluster', key: 'a' });
+});
+
+test('additive cluster selection keeps previous slot selections', () => {
+  const store = createIdStore({ count: 3 });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  store.selectId(1);
+  store.selectCluster('b', { additive: true });
+  const state = store.snapshot();
+
+  assert.deepEqual(state.selectedSlotIds.sort((a, b) => a - b), [1, 2]);
+});
+
+test('initial Solo override state can be restored independently from other slot state', () => {
+  const store = createIdStore({ count: 3, initialSoloIds: [2] });
+  const state = store.snapshot();
+
+  assert.equal(state.slots.find((slot) => slot.id === 1).solo, false);
+  assert.equal(state.slots.find((slot) => slot.id === 2).solo, true);
+  assert.equal(state.slots.find((slot) => slot.id === 3).solo, false);
+});
+
+test('deleted slots are removed from selection and panel actions still ignore them', () => {
+  const store = createIdStore({ count: 3, allowDelete: true });
+  store.selectId(1);
+  store.selectId(2, { additive: true });
+  store.deleteSlot(2);
+  store.setAllVisibleEnabled(false);
+
+  const state = store.snapshot();
+  assert.deepEqual(state.selectedSlotIds, [1]);
+  assert.equal(state.slots.find((slot) => slot.id === 2).visible, false);
+  assert.equal(state.slots.find((slot) => slot.id === 2).enabled, false);
+  assert.equal(state.slots.find((slot) => slot.id === 1).enabled, false);
+  assert.equal(state.slots.find((slot) => slot.id === 3).enabled, false);
 });
