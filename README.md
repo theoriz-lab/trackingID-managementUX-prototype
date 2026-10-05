@@ -36,14 +36,14 @@ The current prototype is intentionally **3D-first**. There is no right-side insp
   - When slot deletion is enabled, a per-slot delete control hides and disables that slot. Deleted slots are excluded from all bulk operations and automatic allocation. Restore makes them visible again but leaves them disabled.
 - Every left and bottom cluster capsule shows a small live point-cloud silhouette plus current centroid coordinates `x / y / z`.
 - Right-clicking a cluster in the bottom tray opens a compact ID reassignment menu. Identity naming and unassignment are also available there when relevant.
-- Clicking/tapping a cluster in the **3D view** selects it. The cluster bounding box, center centroid and a small donut marker projected onto the floor are drawn only for the selected live cluster.
+- Clicking/tapping a cluster in the **3D view** selects it; clicking empty 3D space clears the selection. The selected cluster gets a luminous 3D halo plus its bounding box, centroid and floor donut. The bottom tray simultaneously dims other clusters and glows the selected one.
 - Assigned clusters use their ID color in 3D; unassigned clusters are gray. A learned identity name is displayed above the matching cluster with the public ID underneath.
 - **Solo is a spatial focus override:** every visible Solo target stays fully legible even when that ID is disabled, while non-Solo clusters, point clouds, labels and manual proxies are reduced to only a few percent opacity. Disabled state still controls allocation/output eligibility; it does not suppress Solo focus.
-- Dragging an assigned cluster directly in the 3D view starts **Manual takeover**. The pointer is raycast onto the floor, producing an ID-colored sparse-point proxy with a floor centroid/donut. The live tracked source stays gray and loses its selected-cluster decoration.
-- During Manual takeover, a dashed line links the floor proxy to the live source centroid. Dragging the 3D cluster onto a left slot can reassign it while preserving the ground takeover position.
-- Releasing Manual takeover animates the proxy back toward the live tracked position with a smooth acceleration/deceleration curve rather than jumping.
-- Camera orbit uses the **same ViewCube implementation as the Augmenta ThreeJS example**. Drag the cube to orbit, click its faces for orthographic presets, use the ortho preset panel/Tab navigation, and Escape/close to return to perspective. This prototype only adapts the cube visually to remain translucent.
-- Direct canvas orbit/pan stays disabled so cluster manipulation owns the 3D pointer gesture.
+- Dragging an assigned live cluster directly in the 3D view starts a **temporary Manual takeover**. The pointer is raycast onto the floor and drives an ID-colored sparse-point proxy while the automatic tracked source stays in place. Releasing the pointer always exits Manual mode and smoothly returns the proxy to live tracking.
+- Pressing the fixed **M** button starts a persistent Manual takeover. In that mode only the separate Manual proxy is draggable; the automatic live cluster remains read-only in its tracked position until M is released.
+- During either Manual interaction, a dashed line links the floor proxy to the live source centroid. A temporary live-cluster drag may still be dropped onto a left slot to reassign the cluster, but the release ends Manual mode.
+- Camera orbit keeps the **same ViewCube implementation as the Augmenta ThreeJS example**. Drag the cube to orbit, click its faces for orthographic presets, use the ortho preset panel/Tab navigation, and Escape/close to return to perspective.
+- On the canvas, **right-button drag pans**, **middle-button / scroll-wheel-click drag orbits**, and the wheel still zooms. Left drag remains exclusively reserved for cluster/Manual interaction. The camera projection is offset so the tracked scene is centered in the unobscured workspace beside the left ID panel.
 - Keyboard: `L` toggles Lock & Learn for the selected assignment, `M` toggles Manual takeover, and `Esc` clears selection/context UI.
 
 ## Live connection
