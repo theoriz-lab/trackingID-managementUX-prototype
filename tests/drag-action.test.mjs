@@ -164,3 +164,54 @@ test('Swap mode contextually falls back to Kick for an unassigned incoming clust
     [['waiting', 1], ['occupied', 2]]
   );
 });
+
+
+test('drop assignment preview matches committed Swap result', () => {
+  const store = createIdStore({ count: 4, occupiedDropMode: 'swap' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('c', 3)]);
+  const before = store.snapshot();
+  const preview = resolveClusterDropAssignments(before, 'a', 2);
+
+  store.assignClusterToId('a', 2);
+  const after = store.snapshot();
+  for (const [key, id] of preview) {
+    const slot = after.slots.find((candidate) => candidate.clusterKey === key);
+    assert.equal(slot?.id ?? null, id);
+  }
+});
+
+test('drop assignment preview matches committed Kick result', () => {
+  const store = createIdStore({ count: 5, occupiedDropMode: 'kick' });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('c', 3)]);
+  store.setEnabled(4, false);
+  store.lockAndLearn(5);
+  const before = store.snapshot();
+  const preview = resolveClusterDropAssignments(before, 'a', 2);
+
+  // IDs 4 and 5 are ineligible, so the displaced cluster has nowhere to go.
+  assert.deepEqual([...preview.entries()], [['a', 2], ['b', null]]);
+
+  store.assignClusterToId('a', 2);
+  const after = store.snapshot();
+  for (const [key, id] of preview) {
+    const slot = after.slots.find((candidate) => candidate.clusterKey === key);
+    assert.equal(slot?.id ?? null, id);
+  }
+});
+
+test('Kick preview skips disabled, locked, hidden and Manual free slots', () => {
+  const store = createIdStore({ count: 6, occupiedDropMode: 'kick', allowDelete: true });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('manual', 5)]);
+  store.setEnabled(3, false);
+  store.lockAndLearn(4);
+  store.setManual(5, true);
+  store.deleteSlot(6);
+
+  const state = store.snapshot();
+  assert.deepEqual(resolveClusterDropPreview(state, 'a', 2), {
+    sourceId: 1,
+    targetId: 2,
+    displacedTo: null,
+    displaced: true
+  });
+});
