@@ -52,8 +52,8 @@ function previewCircles(points) {
   }).join('');
 }
 
-function capsuleTitle(cluster, slot) {
-  return identityNameForCluster(slot, cluster?.key) || shortClusterName(cluster);
+function capsuleTitle(cluster) {
+  return shortClusterName(cluster);
 }
 
 export function createIdInterface({ store }) {
@@ -87,6 +87,7 @@ export function createIdInterface({ store }) {
   function clusterCapsuleMarkup(cluster, slot, { tray = false, selected = false } = {}) {
     const color = slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS;
     const manual = Boolean(slot?.manual);
+    const identityName = identityNameForCluster(slot, cluster?.key);
     const clusterLocked = Boolean(
       cluster?.lockRequested
       || slot?.locked
@@ -109,16 +110,18 @@ export function createIdInterface({ store }) {
         data-live-cluster-key="${escapeHtml(cluster.key)}"
         role="button"
         tabindex="0"
-        aria-label="${escapeHtml(capsuleTitle(cluster, slot))}"
+        aria-label="${escapeHtml(capsuleTitle(cluster))}"
       >
         <svg class="capsule-preview" viewBox="0 0 100 100" aria-hidden="true">
           <path class="capsule-preview-frame" d="M12 34 V12 H88 V34"></path>
           ${previewCircles(cluster.preview)}
         </svg>
         <span class="capsule-copy">
-          <strong>${escapeHtml(capsuleTitle(cluster, slot))}${manual ? ' · Manual' : ''}</strong>
+          <strong>${escapeHtml(capsuleTitle(cluster))}${manual ? ' · Manual' : ''}</strong>
           <small class="capsule-coords">${escapeHtml(coordinateText(cluster))}</small>
-          <em class="capsule-assignment">${slot ? `ID ${slot.id}` : 'Unassigned'}</em>
+          <em class="capsule-assignment">${slot
+            ? `ID ${slot.id}${identityName ? ` · ${escapeHtml(identityName)}` : ''}`
+            : cluster?.lockRequested ? 'Unassigned · lock pending' : 'Unassigned'}</em>
         </span>
         <button
           class="cluster-lock-button${clusterLocked ? ' active' : ''}"
@@ -502,7 +505,7 @@ export function createIdInterface({ store }) {
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
     ghost.style.setProperty('--capsule-color', slot ? idColorCss(slot.id) : UNASSIGNED_ID_COLOR_CSS);
-    ghost.textContent = capsuleTitle(cluster, slot);
+    ghost.textContent = capsuleTitle(cluster);
     document.body.appendChild(ghost);
     dragState.ghost = ghost;
     moveDragAt(clientX, clientY);
