@@ -22,15 +22,20 @@ export function deriveOperatorVisualState(slots = []) {
   };
 }
 
-export function identityNameForCluster(slot, clusterKey) {
-  if (!slot || !clusterKey || slot.identityKey !== clusterKey) return '';
-  return String(slot.identityName ?? '').trim();
+export function identityNameForCluster(cluster) {
+  if (!cluster?.identityLocked) return '';
+  return String(cluster.identityName ?? '').trim();
 }
 
-export function operatorLabelForCluster(slot, clusterKey) {
-  if (!slot) return '';
-  const identityName = identityNameForCluster(slot, clusterKey);
-  return identityName ? `${slot.id} : ${identityName}` : String(slot.id);
+export function operatorClusterName(cluster) {
+  const identityName = identityNameForCluster(cluster);
+  return identityName || (cluster?.label ? `Cluster ${cluster.label}` : 'Cluster');
+}
+
+export function operatorLabelForCluster(slot, cluster) {
+  const identityName = identityNameForCluster(cluster);
+  if (slot) return identityName ? `${slot.id} : ${identityName}` : String(slot.id);
+  return identityName;
 }
 
 
