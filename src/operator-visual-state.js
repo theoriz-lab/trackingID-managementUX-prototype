@@ -32,3 +32,18 @@ export function operatorLabelForCluster(slot, clusterKey) {
   const identityName = identityNameForCluster(slot, clusterKey);
   return identityName ? `${slot.id} : ${identityName}` : String(slot.id);
 }
+
+
+export function deriveSelectionState(slots = [], selected = null, selectedSlotIds = []) {
+  const slotIds = new Set(selectedSlotIds);
+  const clusterKeys = new Set();
+
+  for (const slot of slots) {
+    if (!slot || slot.visible === false || !slotIds.has(slot.id) || !slot.clusterKey) continue;
+    clusterKeys.add(slot.clusterKey);
+  }
+
+  if (selected?.type === 'cluster' && selected.key) clusterKeys.add(selected.key);
+
+  return { slotIds, clusterKeys };
+}
