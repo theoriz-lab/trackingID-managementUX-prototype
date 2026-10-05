@@ -161,7 +161,7 @@ test('a selected cluster is cleared when it leaves tracking', () => {
 test('operator assignment keeps priority over identity lock while the override cluster is present', () => {
   const store = createIdStore({ count: 3 });
   store.syncFrame([cluster('alice', 1), cluster('bob', 2)]);
-  store.setIdentityName(1, 'Alice');
+  store.setClusterIdentityName('alice', 'Alice');
   store.lockAndLearn(1);
 
   store.assignClusterToId('bob', 1);
@@ -180,21 +180,28 @@ test('operator assignment keeps priority over identity lock while the override c
   assert.equal(state.slots[0].clusterKey, 'alice');
 });
 
-test('learning a different identity replaces the stale name with a funny identity', () => {
+test('unlock clears the old identity and a new lock learns a fresh cluster identity', () => {
   const store = createIdStore({ count: 2 });
   store.syncFrame([cluster('alice', 1)]);
-  store.setIdentityName(1, 'Alice');
   store.lockAndLearn(1);
+  store.setClusterIdentityName('alice', 'Alice');
   store.unlock(1);
+
+  let state = store.snapshot();
+  let alice = state.clusters.find((item) => item.key === 'alice');
+  assert.equal(alice.identityLocked, false);
+  assert.equal(alice.identityName, '');
 
   store.syncFrame([]);
   store.syncFrame([cluster('bob', 1)]);
   store.lockAndLearn(1);
 
-  const state = store.snapshot();
+  state = store.snapshot();
+  const bob = state.clusters.find((item) => item.key === 'bob');
   assert.equal(state.slots[0].identityKey, 'bob');
-  assert.notEqual(state.slots[0].identityName, '');
-  assert.notEqual(state.slots[0].identityName, 'Alice');
+  assert.equal(bob.identityLocked, true);
+  assert.notEqual(bob.identityName, '');
+  assert.notEqual(bob.identityName, 'Alice');
 });
 
 
@@ -358,7 +365,7 @@ test('operator can assign a cluster to a visible disabled slot', () => {
   assert.equal(state.slots[1].enabled, false);
 });
 
-test('unassigned cluster lock request follows the cluster into its assigned slot', () => {
+test('unassigned cluster identity lock follows the cluster into its assigned slot', () => {
   const store = createIdStore({ count: 1 });
   store.syncFrame([cluster('occupied', 1), cluster('waiting', 2)]);
 
@@ -368,15 +375,17 @@ test('unassigned cluster lock request follows the cluster into its assigned slot
 
   assert.equal(store.toggleClusterLock('waiting'), true);
   state = store.snapshot();
-  assert.equal(state.clusters.find((item) => item.key === 'waiting').lockRequested, true);
+  let waiting = state.clusters.find((item) => item.key === 'waiting');
+  assert.equal(waiting.identityLocked, true);
+  assert.notEqual(waiting.identityName, '');
 
   store.assignClusterToId('waiting', 1);
   state = store.snapshot();
+  waiting = state.clusters.find((item) => item.key === 'waiting');
   assert.equal(state.slots[0].clusterKey, 'waiting');
   assert.equal(state.slots[0].locked, true);
   assert.equal(state.slots[0].identityKey, 'waiting');
-  assert.notEqual(state.slots[0].identityName, '');
-  assert.equal(state.clusters.find((item) => item.key === 'waiting').lockRequested, false);
+  assert.equal(waiting.identityLocked, true);
 });
 
 test('clusters receive stable alphabetical operator labels', () => {
@@ -482,4 +491,84 @@ test('unchanged Manual position does not publish a redundant update', () => {
 
   assert.equal(store.setManualPosition(1, [1, 0, 2]), false);
   assert.deepEqual(reasons, []);
+});
+
+
+test('locked identity remains cached after the live cluster disappears', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)], 1_000);
+  store.lockAndLearn(1);
+  const locked = store.snapshot().clusters.find((item) => item.key === 'a');
+  const name = locked.identityName;
+
+  store.syncFrame([], 1_000 + 60_000);
+  const state = store.snapshot();
+  const cached = state.clusters.find((item) => item.key === 'a');
+
+  assert.equal(cached.visible, false);
+  assert.equal(cached.identityLocked, true);
+  assert.equal(cached.identityName, name);
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[0].locked, true);
+  assert.equal(state.slots[0].identityKey, 'a');
+});
+
+test('unlocking a reserved slot removes the cached identity name', () => {
+  const store = createIdStore({ count: 2 });
+  store.syncFrame([cluster('a', 1)]);
+  store.lockAndLearn(1);
+  const lockedName = store.snapshot().clusters.find((item) => item.key === 'a').identityName;
+  assert.notEqual(lockedName, '');
+
+  store.unlock(1);
+  const state = store.snapshot();
+  const liveCluster = state.clusters.find((item) => item.key === 'a');
+
+  assert.equal(state.slots[0].locked, false);
+  assert.equal(state.slots[0].identityKey, null);
+  assert.equal(liveCluster.identityLocked, false);
+  assert.equal(liveCluster.identityName, '');
+});
+
+test('unlocking a missing cached identity removes it from the cluster cache', () => {
+  const store = createIdStore({ count: 1 });
+  store.syncFrame([cluster('a', 1)], 1_000);
+  store.lockAndLearn(1);
+  store.syncFrame([], 2_000);
+
+  assert.equal(store.toggleClusterLock('a'), true);
+  const state = store.snapshot();
+  assert.equal(state.clusters.some((item) => item.key === 'a'), false);
+  assert.equal(state.slots[0].locked, false);
+  assert.equal(state.slots[0].identityKey, null);
+});
+
+test('moving a locked live identity transfers the slot reservation with it', () => {
+  const store = createIdStore({ count: 3 });
+  store.syncFrame([cluster('a', 1)]);
+  store.lockAndLearn(1);
+
+  store.assignClusterToId('a', 2);
+  const state = store.snapshot();
+
+  assert.equal(state.slots[0].locked, false);
+  assert.equal(state.slots[0].identityKey, null);
+  assert.equal(state.slots[1].clusterKey, 'a');
+  assert.equal(state.slots[1].locked, true);
+  assert.equal(state.slots[1].identityKey, 'a');
+  assert.equal(state.clusters.find((item) => item.key === 'a').identityLocked, true);
+});
+
+test('locked identity reappears into its reserved slot', () => {
+  const store = createIdStore({ count: 3 });
+  store.syncFrame([cluster('a', 1)]);
+  store.lockAndLearn(1);
+  store.syncFrame([]);
+  store.syncFrame([cluster('b', 1)]);
+  store.syncFrame([cluster('b', 1), cluster('a', 3)]);
+
+  const state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+  assert.equal(state.slots[0].identityKey, 'a');
+  assert.equal(state.clusters.find((item) => item.key === 'a').identityLocked, true);
 });
