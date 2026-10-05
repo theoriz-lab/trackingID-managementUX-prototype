@@ -4,6 +4,7 @@ import {
   deriveOperatorVisualState,
   deriveSelectionState,
   identityNameForCluster,
+  operatorClusterName,
   operatorLabelForCluster
 } from '../src/operator-visual-state.js';
 
@@ -39,28 +40,48 @@ test('Solo overrides disabled state for operator focus', () => {
   assert.deepEqual([...state.soloClusterKeys], ['alice']);
 });
 
-test('identity names do not follow a temporary operator override', () => {
+test('identity names belong to the locked cluster, not the temporary slot occupant', () => {
   const slot = {
     id: 1,
     clusterKey: 'bob',
-    identityKey: 'alice',
-    identityName: 'Alice'
+    identityKey: 'alice'
   };
+  const bob = { key: 'bob', label: 'B', identityLocked: false, identityName: '' };
+  const alice = { key: 'alice', label: 'A', identityLocked: true, identityName: 'Alice' };
 
-  assert.equal(identityNameForCluster(slot, 'bob'), '');
-  assert.equal(operatorLabelForCluster(slot, 'bob'), '1');
-  assert.equal(identityNameForCluster(slot, 'alice'), 'Alice');
+  assert.equal(identityNameForCluster(bob), '');
+  assert.equal(operatorLabelForCluster(slot, bob), '1');
+  assert.equal(identityNameForCluster(alice), 'Alice');
+  assert.equal(operatorClusterName(alice), 'Alice');
 });
 
 test('matching identities render as ID colon name', () => {
   const slot = {
     id: 4,
     clusterKey: 'singer-a',
-    identityKey: 'singer-a',
+    identityKey: 'singer-a'
+  };
+  const cluster = {
+    key: 'singer-a',
+    label: 'A',
+    identityLocked: true,
     identityName: 'Singer A'
   };
 
-  assert.equal(operatorLabelForCluster(slot, 'singer-a'), '4 : Singer A');
+  assert.equal(operatorLabelForCluster(slot, cluster), '4 : Singer A');
+  assert.equal(operatorClusterName(cluster), 'Singer A');
+});
+
+test('unlocking identity state falls back to the alphabetical cluster name', () => {
+  const cluster = {
+    key: 'a',
+    label: 'A',
+    identityLocked: false,
+    identityName: 'Pancake'
+  };
+
+  assert.equal(identityNameForCluster(cluster), '');
+  assert.equal(operatorClusterName(cluster), 'Cluster A');
 });
 
 
