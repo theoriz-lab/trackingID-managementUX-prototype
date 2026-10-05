@@ -70,6 +70,14 @@ viewer.setClusterSelectionHandler((key) => {
   else idStore.clearSelection();
 });
 viewer.setClusterDragHandler((event) => idInterface.handle3dClusterDrag(event));
+viewer.setClusterContextHandler(({ key, clientX, clientY }) => {
+  idInterface.openClusterContextMenu(
+    key,
+    clientX,
+    clientY,
+    { requireSelected: true }
+  );
+});
 viewer.setOperatorState(idStore.snapshot());
 
 function syncCameraPanelInset() {
