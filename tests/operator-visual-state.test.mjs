@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   deriveOperatorVisualState,
+  deriveSelectionState,
   identityNameForCluster,
   operatorLabelForCluster
 } from '../src/operator-visual-state.js';
@@ -72,4 +73,22 @@ test('deleted slots do not participate in Solo or cluster mapping', () => {
   assert.equal(state.soloMode, false);
   assert.equal(state.slotByCluster.has('hidden'), false);
   assert.equal(state.slotByCluster.get('visible')?.id, 2);
+});
+
+
+test('selection derivation is shared between slots and clusters', () => {
+  const slots = [
+    { id: 1, visible: true, clusterKey: 'a' },
+    { id: 2, visible: true, clusterKey: 'b' },
+    { id: 3, visible: false, clusterKey: 'hidden' }
+  ];
+
+  const state = deriveSelectionState(
+    slots,
+    { type: 'cluster', key: 'free-cluster' },
+    [1, 2, 3]
+  );
+
+  assert.deepEqual([...state.slotIds], [1, 2, 3]);
+  assert.deepEqual([...state.clusterKeys], ['a', 'b', 'free-cluster']);
 });
