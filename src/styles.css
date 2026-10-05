@@ -297,11 +297,9 @@ button:focus-visible { outline: 2px solid rgba(79, 211, 255, .86); outline-offse
   transition: background var(--motion-fast), border-color var(--motion-fast);
 }
 .id-panel-actions button:hover { background: rgba(49, 70, 99, .42); border-color: rgba(153,185,232,.40); }
-.id-panel-actions button.active {
-  border-color: rgba(34, 211, 238, .46);
-  color: #dffaff;
-  background: rgba(34, 211, 238, .10);
-  box-shadow: 0 0 16px rgba(34,211,238,.08);
+.id-panel-actions button:disabled {
+  opacity: .32;
+  cursor: default;
 }
 .lock-symbol {
   position: relative;
