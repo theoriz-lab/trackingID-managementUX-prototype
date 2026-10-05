@@ -146,7 +146,8 @@ export function createIdStore({
   }
 
   function preferredSlotForCluster(cluster) {
-    const sourceId = Number(cluster?.sourceId);
+    if (cluster?.sourceId === null || cluster?.sourceId === undefined) return null;
+    const sourceId = Number(cluster.sourceId);
     if (!Number.isInteger(sourceId) || sourceId < 0) return null;
     const slot = getSlot(sourceId);
     return isAutoEligible(slot) ? slot : null;
@@ -280,7 +281,11 @@ export function createIdStore({
         label: previous?.label ?? clusterLetter(nextClusterOrdinal++),
         lockRequested: Boolean(previous?.lockRequested),
         uuid: item.uuid ? String(item.uuid) : '',
-        sourceId: Number.isInteger(Number(item.sourceId)) ? Number(item.sourceId) : null,
+        sourceId: item.sourceId !== null
+          && item.sourceId !== undefined
+          && Number.isInteger(Number(item.sourceId))
+          ? Number(item.sourceId)
+          : null,
         visible: true,
         ghost: Boolean(item.ghost),
         sceneAddress: String(item.sceneAddress ?? ''),
