@@ -99,7 +99,6 @@ export function createIdInterface({ store }) {
     const classes = [
       'cluster-capsule',
       slot ? 'assigned' : 'unassigned',
-      manual ? 'manual' : '',
       selected ? 'selected' : ''
     ].filter(Boolean).join(' ');
 
