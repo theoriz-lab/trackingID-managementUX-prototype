@@ -35,11 +35,18 @@ export function operatorLabelForCluster(slot, clusterKey) {
 
 
 export function deriveSelectionState(slots = [], selected = null, selectedSlotIds = []) {
-  const slotIds = new Set(selectedSlotIds);
+  const visibleSlotIds = new Set(
+    slots
+      .filter((slot) => slot && slot.visible !== false)
+      .map((slot) => slot.id)
+  );
+  const slotIds = new Set(
+    selectedSlotIds.filter((id) => visibleSlotIds.has(id))
+  );
   const clusterKeys = new Set();
 
   for (const slot of slots) {
-    if (!slot || slot.visible === false || !slotIds.has(slot.id) || !slot.clusterKey) continue;
+    if (!slot || !slotIds.has(slot.id) || !slot.clusterKey) continue;
     clusterKeys.add(slot.clusterKey);
   }
 
