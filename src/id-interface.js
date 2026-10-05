@@ -79,7 +79,10 @@ function capsuleTitle(cluster) {
 
 export function describeClusterDropAction(snapshot, key, targetId, { insideIdPanel = false } = {}) {
   const sourceSlot = assignedSlotForCluster(snapshot, key);
-  const targetSlot = Number.isInteger(Number(targetId))
+  const hasTargetId = targetId !== null
+    && targetId !== undefined
+    && Number.isInteger(Number(targetId));
+  const targetSlot = hasTargetId
     ? snapshot.slots.find((slot) => slot.id === Number(targetId))
     : null;
 
@@ -778,6 +781,8 @@ export function createIdInterface({ store }) {
 
     suppressClickUntil = performance.now() + 260;
     event.preventDefault();
+    if (event.type !== 'pointerup') return;
+
     if (target) {
       assignDraggedCluster(current.key, target.id);
       return;
