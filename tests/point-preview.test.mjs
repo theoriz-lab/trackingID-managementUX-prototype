@@ -25,3 +25,21 @@ test('point preview respects its sampling limit', () => {
 test('point preview handles empty clouds', () => {
   assert.deepEqual(samplePointPreview([], 32), []);
 });
+
+
+test('point preview uses cluster look-at to build a front view', () => {
+  const preview = samplePointPreview([
+    0, 0, -2,
+    0, 1, 0,
+    0, 2, 2
+  ], 3, {
+    center: [0, 1, 0],
+    lookAt: [1, 0, 0]
+  });
+
+  assert.deepEqual(preview, [
+    [1, 1],
+    [0.5, 0.5],
+    [0, 0]
+  ]);
+});
