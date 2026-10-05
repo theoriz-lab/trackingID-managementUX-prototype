@@ -9,6 +9,7 @@ import { idColorValue, UNASSIGNED_ID_COLOR_VALUE } from './id-colors.js';
 import {
   deriveOperatorVisualState,
   deriveSelectionState,
+  identityNameForCluster,
   operatorLabelForCluster
 } from './operator-visual-state.js';
 
@@ -153,6 +154,8 @@ export function createViewer(host) {
   let clusterDragHandler;
   let clusterContextHandler;
   let selectedClusterKeys = new Set();
+  let operatorClusters = new Map();
+  let dropPreviewAssignments = null;
   let soloMode = false;
   let soloSlotIds = new Set();
   let soloClusterKeys = new Set();
@@ -905,6 +908,8 @@ export function createViewer(host) {
       labelColor: color.clone(),
       labelColorHex: color.getHex(),
       labelSelected: false,
+      labelPreviewActive: false,
+      labelPreviewStartedAt: 0,
       sourceId: id,
       uuid: '',
       operatorStateReady: false,
@@ -1184,6 +1189,45 @@ export function createViewer(host) {
     return hit ? [floorHit.x, FLOOR_Y, floorHit.z] : null;
   }
 
+  function previewLabelForCluster(cluster, assignedId) {
+    if (assignedId === null || assignedId === undefined) {
+      return identityNameForCluster(cluster);
+    }
+    const identityName = identityNameForCluster(cluster);
+    return identityName ? `${assignedId} : ${identityName}` : String(assignedId);
+  }
+
+  function effectiveOperatorLabel(view, cluster) {
+    if (dropPreviewAssignments?.has(view.key)) {
+      return previewLabelForCluster(cluster, dropPreviewAssignments.get(view.key));
+    }
+    return view.operatorLabelText;
+  }
+
+  function applyDropPreviewToLabels() {
+    const now = performance.now();
+    for (const view of views.values()) {
+      const cluster = operatorClusters.get(view.key);
+      const nextLabel = effectiveOperatorLabel(view, cluster);
+      const previewed = Boolean(dropPreviewAssignments?.has(view.key));
+      if (view.labelText !== nextLabel) {
+        replaceLabelTexture(view.label, nextLabel, view.labelColor, view.labelSelected);
+        view.labelText = nextLabel;
+        view.labelColorHex = view.labelColor.getHex();
+        view.labelPreviewStartedAt = now;
+      }
+      view.labelPreviewActive = previewed;
+      view.label.visible = Boolean(nextLabel);
+    }
+  }
+
+  function setDropPreviewAssignments(assignments) {
+    dropPreviewAssignments = assignments instanceof Map && assignments.size
+      ? new Map(assignments)
+      : null;
+    applyDropPreviewToLabels();
+  }
+
   function setOperatorState(snapshot) {
     const slots = snapshot?.slots ?? [];
     const clusters = snapshot?.clusters ?? [];
@@ -1200,6 +1244,7 @@ export function createViewer(host) {
     selectedClusterKeys = selection.clusterKeys;
 
     const clusterByKey = new Map(clusters.map((cluster) => [cluster.key, cluster]));
+    operatorClusters = clusterByKey;
 
     for (const view of views.values()) {
       const slot = slotByCluster.get(view.key);
@@ -1235,6 +1280,7 @@ export function createViewer(host) {
       updateLabel(view, view.sourceId, view.uuid);
     }
 
+    if (dropPreviewAssignments) applyDropPreviewToLabels();
     syncManualViews(slots, clusters);
     refreshInteractionStyles();
   }
@@ -1868,7 +1914,16 @@ export function createViewer(host) {
 
   renderer.setAnimationLoop(() => {
     controls.update();
-    zoneRenderer.animate(performance.now());
+    const now = performance.now();
+    zoneRenderer.animate(now);
+    for (const view of views.values()) {
+      if (!view.labelPreviewActive || !view.labelPreviewStartedAt) continue;
+      const t = Math.min((now - view.labelPreviewStartedAt) / 180, 1);
+      const pulse = 0.86 + 0.14 * (1 - Math.pow(1 - t, 3));
+      const baseY = String(view.labelText).includes('\n') ? 0.36 : 0.31;
+      view.label.scale.set(1.0 * pulse, baseY * pulse, 1);
+      if (t >= 1) view.labelPreviewStartedAt = 0;
+    }
     renderer.render(scene, camera);
   });
 
@@ -1896,7 +1951,8 @@ export function createViewer(host) {
     setClusterSelectionHandler,
     setClusterDragHandler,
     setClusterContextHandler,
-    setOperatorState
+    setOperatorState,
+    setDropPreviewAssignments
   };
 }
 
