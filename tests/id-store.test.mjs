@@ -220,3 +220,118 @@ test('point preview data is cloned through snapshots', () => {
 
   assert.deepEqual(second.clusters[0].preview, [[0.1, 0.2], [0.8, 0.9]]);
 });
+
+
+test('strict overflow clusters stay refused until they leave tracking', () => {
+  const store = createIdStore({ count: 2, strictMode: true });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('c', 3)]);
+
+  let state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'a');
+  assert.equal(state.slots[1].clusterKey, 'b');
+  assert.equal(state.slots.some((slot) => slot.clusterKey === 'c'), false);
+
+  // A leaves and frees ID 1, but c was refused while the range was full.
+  store.syncFrame([cluster('b', 2), cluster('c', 3)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, null);
+  assert.equal(state.slots[1].clusterKey, 'b');
+
+  // Once c actually leaves, re-entering makes it eligible again.
+  store.syncFrame([cluster('b', 2)]);
+  store.syncFrame([cluster('b', 2), cluster('c', 3)]);
+  state = store.snapshot();
+  assert.equal(state.slots[0].clusterKey, 'c');
+});
+
+test('non-strict overflow clusters acquire an ID when one becomes free', () => {
+  const store = createIdStore({ count: 2, strictMode: false });
+  store.syncFrame([cluster('a', 1), cluster('b', 2), cluster('c', 3)]);
+
+  store.syncFrame([cluster('b', 2), cluster('c', 3)]);
+  const state = store.snapshot();
+
+  assert.equal(state.slots[0].clusterKey, 'c');
+  assert.equal(state.slots[1].clusterKey, 'b');
+});
+
+test('changing Min and Max IDs removes slots outside the managed range', () => {
+  const store = createIdStore({ count: 5 });
+  store.setIdRange(2, 4);
+  let state = store.snapshot();
+
+  assert.deepEqual(state.slots.map((slot) => slot.id), [2, 3, 4]);
+  assert.deepEqual(state.options, {
+    strictMode: false,
+    allowDelete: false,
+    minId: 2,
+    maxId: 4
+  });
+
+  store.setIdRange(4, 6);
+  state = store.snapshot();
+  assert.deepEqual(state.slots.map((slot) => slot.id), [4, 5, 6]);
+  assert.equal(state.slots.find((slot) => slot.id === 4)?.visible, true);
+});
+
+test('slot deletion hides and disables the slot until restored', () => {
+  const store = createIdStore({ count: 3, allowDelete: true });
+  assert.equal(store.deleteSlot(2), true);
+
+  let state = store.snapshot();
+  const deleted = state.slots.find((slot) => slot.id === 2);
+  assert.equal(deleted.visible, false);
+  assert.equal(deleted.enabled, false);
+
+  store.setAllVisibleEnabled(false);
+  state = store.snapshot();
+  assert.equal(state.slots.find((slot) => slot.id === 1).enabled, false);
+  assert.equal(state.slots.find((slot) => slot.id === 2).enabled, false);
+  assert.equal(state.slots.find((slot) => slot.id === 3).enabled, false);
+
+  assert.equal(store.restoreDeletedSlots(), true);
+  state = store.snapshot();
+  assert.equal(state.slots.find((slot) => slot.id === 2).visible, true);
+  assert.equal(state.slots.find((slot) => slot.id === 2).enabled, false);
+});
+
+test('slot deletion is blocked until enabled in options', () => {
+  const store = createIdStore({ count: 2 });
+  assert.equal(store.deleteSlot(1), false);
+  store.setAllowDelete(true);
+  assert.equal(store.deleteSlot(1), true);
+});
+
+test('bulk lock operations only affect visible slots', () => {
+  const store = createIdStore({ count: 3, allowDelete: true });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  store.deleteSlot(2);
+
+  store.lockAll();
+  let state = store.snapshot();
+
+  assert.equal(state.slots.find((slot) => slot.id === 1).locked, true);
+  assert.equal(state.slots.find((slot) => slot.id === 2).locked, false);
+  assert.equal(state.slots.find((slot) => slot.id === 3).locked, true);
+
+  store.unlockAll();
+  state = store.snapshot();
+  assert.equal(state.slots.find((slot) => slot.id === 1).locked, false);
+  assert.equal(state.slots.find((slot) => slot.id === 2).locked, false);
+  assert.equal(state.slots.find((slot) => slot.id === 3).locked, false);
+});
+
+test('Lock all active only locks occupied enabled visible IDs', () => {
+  const store = createIdStore({ count: 4, allowDelete: true });
+  store.syncFrame([cluster('a', 1), cluster('b', 2)]);
+  store.deleteSlot(2);
+  store.setEnabled(3, false);
+
+  store.lockAllActive();
+  const state = store.snapshot();
+
+  assert.equal(state.slots.find((slot) => slot.id === 1).locked, true);
+  assert.equal(state.slots.find((slot) => slot.id === 2).locked, false);
+  assert.equal(state.slots.find((slot) => slot.id === 3).locked, false);
+  assert.equal(state.slots.find((slot) => slot.id === 4).locked, false);
+});
