@@ -27,7 +27,7 @@ Additional behavior:
 - Identity state belongs to the locked cluster, not to the slot. The cluster owns `identityLocked` + its identity name; a slot only owns an `identityKey` reservation while it is locked.
 - A locked cluster keeps its cached identity even while missing from live tracking. If it occupied a slot, that visible slot remains reserved for the identity and must reacquire it even when the slot is disabled.
 - Unlocking a reserved slot also unlocks that identity and removes its name. An unlocked live cluster immediately falls back to its alphabetical operator label.
-- Dropping a cluster on an occupied ID moves the displaced cluster to the next eligible free ID when possible.
+- Occupied-drop behavior is operator-selectable. **Kick** moves the displaced cluster to another eligible free ID, excluding the target and the dragged cluster's vacated source ID; if no eligible ID remains, the displaced cluster is explicitly released for its current tracking lifetime. **Swap** exchanges assignments with the dragged cluster's source ID; if the dragged cluster was unassigned, the displaced target cluster is explicitly released.
 - Lock & Learn on an occupied ID learns that cluster; on an empty ID it waits for the next explicit assignment.
 - Lock active affects occupied IDs only so spare slots remain free.
 - Strict mode must match Pleiades Assign Cluster IDs semantics: an overflow cluster is refused for its current tracking lifetime; Non-strict overflow stays eligible for a later freed ID.
