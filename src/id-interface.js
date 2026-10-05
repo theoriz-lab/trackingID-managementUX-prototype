@@ -177,7 +177,13 @@ export function createIdInterface({ store }) {
       ].filter(Boolean).join(' ');
 
       return `
-        <article class="${rowClasses}" style="--id-color:${idColorCss(slot.id)}" data-slot-id="${slot.id}">
+        <article
+          class="${rowClasses}"
+          style="--id-color:${idColorCss(slot.id)}"
+          data-slot-id="${slot.id}"
+          data-action="select-id"
+          data-id="${slot.id}"
+        >
           <button
             class="slot-id-button"
             type="button"
@@ -194,7 +200,7 @@ export function createIdInterface({ store }) {
             title="Solo ID ${slot.id}"
             aria-pressed="${slot.solo}"
           >S</button>
-          <div class="${wellClasses}" data-drop-type="id" data-id="${slot.id}" data-action="select-id">
+          <div class="${wellClasses}" data-drop-type="id" data-id="${slot.id}">
             ${cluster ? clusterCapsuleMarkup(cluster, slot, { selected }) : ''}
             <button
               class="slot-lock-button${slot.locked ? ' active' : ''}"
@@ -367,9 +373,7 @@ export function createIdInterface({ store }) {
         store.selectCluster(key, { additive: Boolean(event?.shiftKey) });
         break;
       case 'select-id':
-        if (!target.closest?.('.cluster-capsule, .slot-lock-button, .slot-manual-button, .slot-delete-button')) {
-          store.selectId(id, { additive: Boolean(event?.shiftKey) });
-        }
+        store.selectId(id, { additive: Boolean(event?.shiftKey) });
         break;
       default: return false;
     }
