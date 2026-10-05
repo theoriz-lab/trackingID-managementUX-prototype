@@ -70,6 +70,8 @@ export function createIdInterface({ store }) {
   const settingsButton = document.querySelector('#id-settings-button');
   const settingsMenu = document.querySelector('#id-settings-menu');
   const strictModeInput = document.querySelector('#strict-mode');
+  const strictModeLabel = document.querySelector('#strict-mode-label');
+  const strictModeHelp = document.querySelector('#strict-mode-help');
   const minIdInput = document.querySelector('#min-id');
   const maxIdInput = document.querySelector('#max-id');
   const allowDeleteInput = document.querySelector('#allow-slot-delete');
@@ -229,6 +231,10 @@ export function createIdInterface({ store }) {
     toggleAllEnabled.classList.toggle('active', !allVisibleEnabled);
 
     if (document.activeElement !== strictModeInput) strictModeInput.checked = snapshot.options.strictMode;
+    strictModeLabel.textContent = snapshot.options.strictMode ? 'Strict mode' : 'Non-strict mode';
+    strictModeHelp.textContent = snapshot.options.strictMode
+      ? 'Overflow clusters stay refused until they leave tracking'
+      : 'Overflow clusters wait for the next free ID';
     if (document.activeElement !== allowDeleteInput) allowDeleteInput.checked = snapshot.options.allowDelete;
     if (document.activeElement !== minIdInput) minIdInput.value = String(snapshot.options.minId);
     if (document.activeElement !== maxIdInput) maxIdInput.value = String(snapshot.options.maxId);
