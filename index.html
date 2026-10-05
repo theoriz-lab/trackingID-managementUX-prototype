@@ -109,6 +109,22 @@
             <input id="strict-mode" type="checkbox">
             <i aria-hidden="true"></i>
           </label>
+          <fieldset class="settings-choice" aria-labelledby="occupied-drop-mode-label">
+            <legend>
+              <strong id="occupied-drop-mode-label">Occupied ID drop</strong>
+              <small>Choose what happens to the cluster already using the target ID</small>
+            </legend>
+            <div class="settings-choice-options">
+              <label>
+                <input id="occupied-drop-kick" type="radio" name="occupied-drop-mode" value="kick" checked>
+                <span>Kick</span>
+              </label>
+              <label>
+                <input id="occupied-drop-swap" type="radio" name="occupied-drop-mode" value="swap">
+                <span>Swap</span>
+              </label>
+            </div>
+          </fieldset>
           <div class="settings-range">
             <label>
               <span>Min ID</span>
