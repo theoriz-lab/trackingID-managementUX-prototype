@@ -1,6 +1,6 @@
 import { ClusterState } from 'augmenta-client-sdk';
 import { APP_VERSION } from './app-info.js';
-import { createCameraCube } from './camera-cube.js';
+import { createViewCube } from './view-cube.js';
 import { createConnectionController } from './connection.js';
 import { createIdInterface } from './id-interface.js';
 import { createIdStore } from './id-store.js';
@@ -41,10 +41,7 @@ viewer.setClusterSelectionHandler((key) => idStore.selectCluster(key));
 viewer.setClusterDragHandler((event) => idInterface.handle3dClusterDrag(event));
 viewer.setOperatorState(idStore.snapshot());
 
-const cameraCube = createCameraCube({
-  element: document.querySelector('#camera-cube'),
-  viewer
-});
+createViewCube(document.querySelector('#view-cube'), viewer);
 
 let hasInitialCameraFrame = false;
 let lastSceneLabel = '';
@@ -144,7 +141,6 @@ const connection = createConnectionController({
 connection.start();
 
 window.addEventListener('pagehide', () => {
-  cameraCube.destroy();
   connection.stop();
 }, { once: true });
 
