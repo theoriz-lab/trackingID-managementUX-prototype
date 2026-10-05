@@ -203,7 +203,7 @@ export function createIdStore({
   function assignWaitingClusters() {
     let changed = false;
     for (const cluster of clusters.values()) {
-      changed ||= tryAutoAssign(cluster);
+      if (tryAutoAssign(cluster)) changed = true;
     }
     return changed;
   }
@@ -269,7 +269,7 @@ export function createIdStore({
       }
     }
 
-    changed ||= assignWaitingClusters();
+    if (assignWaitingClusters()) changed = true;
 
     if (changed) publish('frame');
     return changed;
