@@ -21,7 +21,7 @@ Keep these concepts separate in both state and UI:
 
 Additional behavior:
 
-- Default allocation uses the next eligible free ID.
+- Default allocation uses the next eligible free enabled ID. Explicit operator drag/drop may assign to a visible disabled slot without enabling it.
 - A disabled, occupied, identity-reserved or manually reserved ID is not automatically eligible.
 - Explicit operator reassignment may override the normal allocator.
 - An occupied Identity-Locked ID is an explicit operator override; ReID must not steal it while that override cluster remains present.
@@ -30,7 +30,7 @@ Additional behavior:
 - Lock & Learn on an occupied ID learns that cluster; on an empty ID it waits for the next explicit assignment.
 - Lock active affects occupied IDs only so spare slots remain free.
 - Strict mode must match Pleiades Assign Cluster IDs semantics: an overflow cluster is refused for its current tracking lifetime; Non-strict overflow stays eligible for a later freed ID.
-- Min/Max define the managed ID range. Shrinking the range removes slots outside it; expanding creates fresh slots for newly included IDs.
+- Min/Max define the managed ID range and ID 0 is valid. Shrinking the range removes slots outside it; expanding creates fresh slots for newly included IDs.
 - Deleted slots are hidden and disabled. Automatic allocation, Solo state and every bulk action must ignore hidden slots. Restoring a deleted slot must not silently re-enable it.
 - Bulk actions are distinct: Lock all active targets occupied enabled visible slots; Lock all targets every visible slot; Unlock all targets every visible slot. The output-state bulk control shows Enable all only when every visible slot is disabled; otherwise it shows Disable all. Disable all and Unlock all occupy the left column.
 - Manual takeover keeps background tracking associated with the ID.
@@ -42,7 +42,10 @@ Additional behavior:
 - **ID color is identity-of-output:** all assigned cluster visuals must derive their color from `src/id-colors.js`. Never derive operator colors from cluster UUID/source ID. Unassigned clusters are always neutral gray.
 - In the left list, the ID number, Solo button and Manual button are fixed controls. Only the cluster capsule moves between slot wells.
 - Clicking the ID number toggles Enabled. The adjacent `S` toggles Solo. Keep both usable by mouse and touch.
-- Cluster capsules in the left list and bottom tray must keep a lightweight point-cloud silhouette preview and live centroid coordinates.
+- Cluster capsules in the left list and bottom tray must keep a lightweight **front-facing** point-cloud silhouette preview and live centroid coordinates. Derive the preview horizontal axis from cluster look-at/orientation; show only the upper framing edge/corners, not a full thumbnail box.
+- Operator-facing cluster names are stable alphabetical labels (A, B, C…) for the lifetime of the tracked cluster; do not expose source cluster numbers as the primary name.
+- Cluster Lock is available directly on every capsule. An unassigned cluster may carry a pending lock request; on explicit assignment the destination slot becomes locked/learned. Learned prototype identities receive one stable funny generated name unless the operator later edits it.
+- Normal 3D labels are bare numeric IDs. A matching learned identity is formatted exactly as `<ID> : <name>`.
 - A normal live cluster bounding box, center centroid, floor donut and look-at decoration are **selection-only**. Hidden decoration must not become visible again merely because a global visibility flag changes.
 - Manual takeover is a floor-raycast interaction. The operator proxy is ID-colored, sparse-point only, and connected by a dashed line from its floor centroid to the live source centroid. The live source becomes gray and does not display a bounding box while takeover is active.
 - A direct left-drag from a live assigned cluster is **temporary Manual**: release/cancel must always clear Manual and return the proxy smoothly to automatic tracking. Manual enabled explicitly with the fixed M button is persistent; while it is active, only the separate Manual proxy is draggable and the live source is read-only.
@@ -50,7 +53,6 @@ Additional behavior:
 - Solo is a renderer-level focus override and must ignore Enabled/Disabled state for focus. A visible disabled Solo slot remains fully legible in both UI and 3D; Enabled/Disabled still controls allocation/output eligibility. Non-Solo clusters, point clouds, labels, vectors and manual proxies must dim together.
 - A 3D identity label is valid only when the slot's `identityKey` matches the displayed cluster key. Never display a reserved identity name on a temporary operator override.
 - Keep the ViewCube behavior in sync with the Augmenta ThreeJS example. On the canvas, left pointer drag is reserved for cluster/Manual interaction, right-button drag pans, middle-button drag orbits, wheel zoom remains available, and one-finger touch must not accidentally orbit the camera. Camera framing must account for the left ID panel so the spatial content is centered in the unobscured viewport.
-- Bottom-tray right-click reassignment is an accelerator; ordinary capsule drag/drop remains available for touch-capable workflows.
 - Use Pointer Events for direct manipulation and preserve touch scrolling/long-hold behavior where the UI needs both scrolling and dragging.
 - Keep the left controls and bottom tray visually lightweight over the 3D stage; do not restore a permanent right-side inspector without an explicit product decision.
 
