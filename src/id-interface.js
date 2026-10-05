@@ -77,7 +77,12 @@ function capsuleTitle(cluster) {
   return operatorClusterName(cluster);
 }
 
-export function describeClusterDropAction(snapshot, key, targetId, { insideIdPanel = false } = {}) {
+export function describeClusterDropAction(
+  snapshot,
+  key,
+  targetId,
+  { insideIdPanel = false, sourceOrigin = 'id' } = {}
+) {
   const sourceSlot = assignedSlotForCluster(snapshot, key);
   const hasTargetId = targetId !== null
     && targetId !== undefined
@@ -97,8 +102,54 @@ export function describeClusterDropAction(snapshot, key, targetId, { insideIdPan
   }
 
   if (insideIdPanel) return 'No change?';
+  if (sourceOrigin === 'tray') return sourceSlot ? 'No change?' : 'Leave unassigned?';
   if (sourceSlot) return `Remove from ID ${sourceSlot.id}?`;
   return 'Leave unassigned?';
+}
+
+function isPreviewEligibleFreeSlot(slot) {
+  return Boolean(
+    slot?.visible
+      && slot.enabled
+      && !slot.manual
+      && !slot.clusterKey
+      && !slot.locked
+  );
+}
+
+export function resolveClusterDropPreview(snapshot, key, targetId) {
+  const sourceSlot = assignedSlotForCluster(snapshot, key);
+  const targetSlot = snapshot.slots.find((slot) => slot.id === Number(targetId));
+  if (!targetSlot || sourceSlot?.id === targetSlot.id) {
+    return { sourceId: sourceSlot?.id ?? null, targetId: targetSlot?.id ?? null, displacedTo: null, displaced: false };
+  }
+
+  const displaced = Boolean(targetSlot.clusterKey && targetSlot.clusterKey !== key);
+  if (!displaced) {
+    return { sourceId: sourceSlot?.id ?? null, targetId: targetSlot.id, displacedTo: null, displaced: false };
+  }
+
+  if (snapshot.options.occupiedDropMode === 'swap') {
+    return {
+      sourceId: sourceSlot?.id ?? null,
+      targetId: targetSlot.id,
+      displacedTo: sourceSlot?.id ?? null,
+      displaced: true
+    };
+  }
+
+  const excluded = new Set([targetSlot.id]);
+  if (sourceSlot) excluded.add(sourceSlot.id);
+  const destination = snapshot.slots.find(
+    (slot) => !excluded.has(slot.id) && isPreviewEligibleFreeSlot(slot)
+  );
+
+  return {
+    sourceId: sourceSlot?.id ?? null,
+    targetId: targetSlot.id,
+    displacedTo: destination?.id ?? null,
+    displaced: true
+  };
 }
 
 export function createIdInterface({ store }) {
@@ -136,6 +187,7 @@ export function createIdInterface({ store }) {
   let dragState = null;
   let sceneDrag = null;
   let activeDropTarget = null;
+  let dropPreviewSignature = '';
   let suppressClickUntil = 0;
 
   function clusterCapsuleMarkup(cluster, slot, { selected = false } = {}) {
@@ -647,6 +699,7 @@ export function createIdInterface({ store }) {
     dragState = {
       pointerId: event.pointerId,
       key,
+      sourceOrigin: handle.closest('#cluster-tray') ? 'tray' : 'id',
       sourceSlotId: sourceSlot?.id ?? null,
       startX: event.clientX,
       startY: event.clientY,
@@ -700,6 +753,7 @@ export function createIdInterface({ store }) {
 
   function cancelPendingDrag() {
     clearHoldTimer();
+    clearDropPreview();
     dragState = null;
     setActiveDropTarget(null);
   }
@@ -738,6 +792,84 @@ export function createIdInterface({ store }) {
     activeDropTarget?.element?.classList.add('drop-target');
   }
 
+  function slotCapsule(id) {
+    if (id === null || id === undefined) return null;
+    return idList.querySelector(`[data-slot-id="${id}"] .slot-well > .cluster-capsule`);
+  }
+
+  function slotWell(id) {
+    if (id === null || id === undefined) return null;
+    return idList.querySelector(`.slot-well[data-id="${id}"]`);
+  }
+
+  function clearPreviewElement(element) {
+    if (!element) return;
+    element.classList.remove('drop-preview-moving', 'drop-preview-removing');
+    element.style.removeProperty('--drop-preview-x');
+    element.style.removeProperty('--drop-preview-y');
+  }
+
+  function clearDropPreview() {
+    idList.querySelectorAll('.drop-preview-moving, .drop-preview-removing').forEach(clearPreviewElement);
+    dropPreviewSignature = '';
+  }
+
+  function movePreviewElement(element, destination) {
+    if (!element || !destination) return;
+    const from = element.getBoundingClientRect();
+    const to = destination.getBoundingClientRect();
+    const dx = to.left + (to.width - from.width) / 2 - from.left;
+    const dy = to.top + (to.height - from.height) / 2 - from.top;
+    element.style.setProperty('--drop-preview-x', `${dx}px`);
+    element.style.setProperty('--drop-preview-y', `${dy}px`);
+    element.classList.add('drop-preview-moving');
+  }
+
+  function applyDropPreview(clientX, clientY, target) {
+    if (!dragState) return;
+    const insideIdPanel = pointInsideIdPanel(clientX, clientY);
+    const signature = [
+      dragState.key,
+      dragState.sourceOrigin,
+      target?.id ?? 'none',
+      insideIdPanel ? 'inside' : 'outside',
+      store.snapshot().options.occupiedDropMode
+    ].join('|');
+    if (signature === dropPreviewSignature) return;
+
+    clearDropPreview();
+    dropPreviewSignature = signature;
+
+    const snapshot = store.snapshot();
+    const sourceSlot = assignedSlotForCluster(snapshot, dragState.key);
+    const sourceCapsule = slotCapsule(sourceSlot?.id);
+
+    if (!target) {
+      if (!insideIdPanel && dragState.sourceOrigin === 'id' && sourceCapsule) {
+        sourceCapsule.classList.add('drop-preview-removing');
+      }
+      return;
+    }
+
+    const targetWell = slotWell(target.id);
+    if (!targetWell || sourceSlot?.id === target.id) return;
+
+    if (sourceCapsule) movePreviewElement(sourceCapsule, targetWell);
+
+    const preview = resolveClusterDropPreview(snapshot, dragState.key, target.id);
+    if (!preview.displaced) return;
+
+    const targetCapsule = slotCapsule(target.id);
+    if (!targetCapsule) return;
+
+    const displacedDestination = slotWell(preview.displacedTo);
+    if (displacedDestination) {
+      movePreviewElement(targetCapsule, displacedDestination);
+    } else {
+      targetCapsule.classList.add('drop-preview-removing');
+    }
+  }
+
   function pointInsideIdPanel(clientX, clientY) {
     const rect = idPanel.getBoundingClientRect();
     return clientX >= rect.left
@@ -750,7 +882,8 @@ export function createIdInterface({ store }) {
     if (!dragState?.ghost) return;
     const snapshot = store.snapshot();
     const label = describeClusterDropAction(snapshot, dragState.key, target?.id ?? null, {
-      insideIdPanel: pointInsideIdPanel(clientX, clientY)
+      insideIdPanel: pointInsideIdPanel(clientX, clientY),
+      sourceOrigin: dragState.sourceOrigin
     });
     const action = dragState.ghost.querySelector('.drag-ghost-action');
     if (action) action.textContent = label;
@@ -764,6 +897,7 @@ export function createIdInterface({ store }) {
     setActiveDropTarget(target);
     dragState.ghost.hidden = false;
     updateDragGhostAction(clientX, clientY, target);
+    applyDropPreview(clientX, clientY, target);
   }
 
   function finishDrag(event) {
@@ -772,6 +906,7 @@ export function createIdInterface({ store }) {
     clearHoldTimer(current);
     dragState = null;
     document.body.classList.remove('dragging-cluster');
+    clearDropPreview();
     current.ghost?.remove();
     if (current.source.hasPointerCapture?.(event.pointerId)) current.source.releasePointerCapture?.(event.pointerId);
 
@@ -788,7 +923,11 @@ export function createIdInterface({ store }) {
       return;
     }
 
-    if (!pointInsideIdPanel(event.clientX, event.clientY) && current.sourceSlotId !== null) {
+    if (
+      current.sourceOrigin === 'id'
+      && !pointInsideIdPanel(event.clientX, event.clientY)
+      && current.sourceSlotId !== null
+    ) {
       store.releaseId(current.sourceSlotId);
     }
   }
