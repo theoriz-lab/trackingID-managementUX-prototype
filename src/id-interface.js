@@ -68,6 +68,10 @@ function previewCircles(points) {
   }).join('');
 }
 
+function previewMarkup(points) {
+  return `<path class="capsule-preview-frame" d="M12 34 V12 H88 V34"></path>${previewCircles(points)}`;
+}
+
 function capsuleTitle(cluster) {
   return operatorClusterName(cluster);
 }
@@ -148,8 +152,7 @@ export function createIdInterface({ store }) {
         aria-label="${escapeHtml(capsuleTitle(cluster))}"
       >
         <svg class="capsule-preview" viewBox="0 0 100 100" aria-hidden="true">
-          <path class="capsule-preview-frame" d="M12 34 V12 H88 V34"></path>
-          ${previewCircles(cluster.preview)}
+          ${previewMarkup(cluster.preview)}
         </svg>
         <span class="capsule-copy">
           <strong>${escapeHtml(capsuleTitle(cluster))}${manual ? ' · Manual' : ''}</strong>
@@ -323,7 +326,7 @@ export function createIdInterface({ store }) {
       const coords = capsule.querySelector('.capsule-coords');
       const preview = capsule.querySelector('.capsule-preview');
       if (coords) coords.textContent = coordinateText(cluster);
-      if (preview) preview.innerHTML = previewCircles(cluster.preview);
+      if (preview) preview.innerHTML = previewMarkup(cluster.preview);
     });
   }
 
